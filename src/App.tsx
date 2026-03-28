@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Sprout, CheckCircle, Search, Leaf, BarChart3, Map, FileText, Activity, 
@@ -8,10 +9,10 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// KONFIGURASI FIREBASE CLOUD (MILIK PAK AGUS - SIMPEDAS)
+// KONFIGURASI FIREBASE CLOUD (RESMI)
 // ==========================================
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -28,44 +29,23 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = 'simpedas-b275c';
 
-// ==========================================
-// DATA AWAL (AUTO-SEED / DATA DUMMY AWAL)
-// ==========================================
-const INITIAL_COMPANIES = [
-  { id: 1, name: 'PT Tambang Makmur 01', category: 'PPKH', sector: 'Tambang Batu Bara', status: 'Tertib', score: 100 },
-  { id: 2, name: 'PT Tambang Makmur 02', category: 'PPKH', sector: 'Tambang Batu Bara', status: 'SP1', score: 60 },
-  { id: 3, name: 'PT Tambang Makmur 03', category: 'PPKH', sector: 'Tambang Batu Bara', status: 'SP2', score: 40 },
-  { id: 4, name: 'PT Tambang Makmur 04', category: 'PPKH', sector: 'Tambang Batu Bara', status: 'SP3', score: 20 },
-  { id: 5, name: 'PT Reklamasi Perdana 01', category: 'PPKH', sector: 'Sarpras Energi', status: 'Tertib', score: 100 },
-  { id: 6, name: 'PT Reklamasi Perdana 02', category: 'PPKH', sector: 'Sarpras Energi', status: 'Tertib', score: 100 },
-  { id: 9, name: 'PT Sawit DAS 01', category: 'PKTMKH', sector: 'Perkebunan Sawit', status: 'Tertib', score: 100 },
-  { id: 10, name: 'PT Sawit DAS 02', category: 'PKTMKH', sector: 'Perkebunan Sawit', status: 'SP1', score: 70 },
-  { id: 13, name: 'PT Reboisasi Hijau 01', category: 'PKTMKH', sector: 'Perkebunan Sawit', status: 'Tertib', score: 100 },
-];
-
-const INITIAL_OBLIGATIONS = {
-  1: [{ id: 101, task: 'Rehabilitasi DAS', sk_lokasi: 'SK.123/MENLHK/2022', lokasi: 'Kab. Kutai Kartanegara', luas: 200.0, status: 'Tertib', file_sk_name: 'SK_PT_Tambang_Makmur_01.pdf', file_bast_name: 'BAST_RehabDAS_Tahap1.pdf', riwayat_rkp: [{ id: 1, tahun: 2022, luas: 100.0 }, { id: 2, tahun: 2023, luas: 100.0 }], riwayat_tanam: [{ id: 1, tahun: 2023, luas: 80.0, status: 'P2' }, { id: 2, tahun: 2024, luas: 70.0, status: 'P1' }, { id: 3, tahun: 2025, luas: 50.0, status: 'P0' }], riwayat_serah_terima: [{ id: 1, tahun: 2025, luas: 200.0 }] }],
-  2: [{ id: 102, task: 'Rehabilitasi DAS', sk_lokasi: 'SK.234/MENLHK/2023', lokasi: 'Kab. Berau', luas: 250.0, status: 'SP1', file_sk_name: '', file_bast_name: '', riwayat_rkp: [{ id: 1, tahun: 2023, luas: 100.0 }, { id: 2, tahun: 2024, luas: 100.0 }], riwayat_tanam: [{ id: 1, tahun: 2024, luas: 100.0, status: 'P1' }, { id: 2, tahun: 2025, luas: 50.0, status: 'P0' }], riwayat_serah_terima: [] }],
-  3: [{ id: 103, task: 'Rehabilitasi DAS', sk_lokasi: 'SK.345/MENLHK/2021', lokasi: 'Kab. Paser', luas: 300.0, status: 'SP2', file_sk_name: '', file_bast_name: '', riwayat_rkp: [{ id: 1, tahun: 2021, luas: 300.0 }], riwayat_tanam: [{ id: 1, tahun: 2022, luas: 150.0, status: 'P2' }, { id: 2, tahun: 2023, luas: 100.0, status: 'P2' }], riwayat_serah_terima: [{ id: 1, tahun: 2024, luas: 50.0 }] }],
-  4: [{ id: 104, task: 'Rehabilitasi DAS', sk_lokasi: 'SK.456/MENLHK/2021', lokasi: 'Kab. Tabalong', luas: 500.0, status: 'SP3', file_sk_name: '', file_bast_name: '', riwayat_rkp: [{ id: 1, tahun: 2021, luas: 100.0 }, { id: 2, tahun: 2022, luas: 100.0 }], riwayat_tanam: [{ id: 1, tahun: 2023, luas: 50.0, status: 'P2' }, { id: 2, tahun: 2024, luas: 100.0, status: 'P1' }, { id: 3, tahun: 2025, luas: 50.0, status: 'P0' }], riwayat_serah_terima: [{ id: 1, tahun: 2025, luas: 100.0 }] }],
-  5: [{ id: 105, task: 'Reklamasi Hutan', sk_lokasi: 'SK.567/MENLHK/2023', lokasi: 'Kab. Tanah Bumbu', luas: 80.0, status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [{ id: 1, tahun: 2023, luas: 80.0 }], riwayat_tanam: [{ id: 1, tahun: 2024, luas: 50.0, status: 'P1' }, { id: 2, tahun: 2025, luas: 30.0, status: 'P0' }], riwayat_serah_terima: [{ id: 1, tahun: 2025, luas: 80.0 }] }],
-  6: [{ id: 106, task: 'Reklamasi Hutan', sk_lokasi: 'SK.678/MENLHK/2024', lokasi: 'Kab. Kotabaru', luas: 150.0, status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [{ id: 1, tahun: 2024, luas: 100.0 }], riwayat_tanam: [{ id: 1, tahun: 2025, luas: 60.0, status: 'P0' }], riwayat_serah_terima: [] }],
-  9: [{ id: 109, task: 'Rehabilitasi DAS', sk_lokasi: 'SK.901/MENLHK/2022', lokasi: 'Kab. Ketapang', luas: 400.0, status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [{ id: 1, tahun: 2022, luas: 400.0 }], riwayat_tanam: [{ id: 1, tahun: 2023, luas: 200.0, status: 'P2' }, { id: 2, tahun: 2024, luas: 200.0, status: 'P1' }], riwayat_serah_terima: [{ id: 1, tahun: 2025, luas: 400.0 }] }],
-  10: [{ id: 110, task: 'Rehabilitasi DAS', sk_lokasi: 'SK.012/MENLHK/2024', lokasi: 'Kab. Sintang', luas: 200.0, status: 'SP1', file_sk_name: '', file_bast_name: '', riwayat_rkp: [{ id: 1, tahun: 2024, luas: 180.0 }], riwayat_tanam: [{ id: 1, tahun: 2025, luas: 100.0, status: 'P0' }], riwayat_serah_terima: [] }],
-  13: [{ id: 113, task: 'Reboisasi', sk_lokasi: 'SK.345.B/MENLHK/2023', lokasi: 'Kab. Kotawaringin Timur', luas: 110.0, status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [{ id: 1, tahun: 2023, luas: 110.0 }], riwayat_tanam: [{ id: 1, tahun: 2024, luas: 60.0, status: 'P1' }, { id: 2, tahun: 2025, luas: 50.0, status: 'P0' }], riwayat_serah_terima: [{ id: 1, tahun: 2025, luas: 110.0 }] }],
-};
-
+// Data kosong untuk Production
 const INITIAL_USERS = [
-  { id: 'u1', name: 'Budi Santoso', email: 'budi@bpdaskahayan.go.id', instance: 'Internal BPDAS', role: 'Superadmin', status: 'Active' },
-  { id: 'u2', name: 'Siti Aminah', email: 'siti@ptmakmur.com', instance: 'PT Tambang Makmur', role: 'User', status: 'Active' },
-  { id: 'u3', name: 'Andi Wijaya', email: 'andi@sawitdas.com', instance: 'PT Sawit DAS', role: 'User', status: 'Pending' },
+  { id: 'u1', name: 'Superadmin BPDAS', email: 'admin@bpdas.go.id', instance: 'Internal BPDAS', role: 'Superadmin', status: 'Active' },
 ];
 
 export default function App() {
   const [authView, setAuthView] = useState('landing');
+  
+  // STATE BARU UNTUK FORM LOGIN
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
   const [registeredName, setRegisteredName] = useState('');
   const [registeredEmail, setRegisteredEmail] = useState('');
   const [registeredInstance, setRegisteredInstance] = useState('');
+  const [registeredPassword, setRegisteredPassword] = useState('');
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -90,64 +70,41 @@ export default function App() {
 
   const [selectedDashboardStatus, setSelectedDashboardStatus] = useState(null);
   const [selectedPlantStatus, setSelectedPlantStatus] = useState(null);
-  
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   // ==========================================
-  // EFFECT: AUTENTIKASI FIREBASE (BACKGROUND)
+  // EFFECT: AUTENTIKASI FIREBASE KETAT
   // ==========================================
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (err) {
-        console.error("Gagal Autentikasi Firebase:", err);
-        // Fallback otomatis jika domain simulasi diblokir oleh Firebase (mencegah stuck di layar loading)
-        setUser({ uid: 'admin-lokal-bypass', role: 'Superadmin', name: 'Superadmin Bypass' });
-      }
-    };
-    initAuth();
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) setUser(currentUser);
+      if (currentUser) {
+        setUser(currentUser);
+        setAuthView('app'); // Langsung masuk aplikasi jika terdeteksi login
+      } else {
+        setUser(null);
+        // Jika tidak ada user, pastikan berada di layar pendaftaran/login
+        if (authView === 'app') setAuthView('landing'); 
+      }
     });
     return () => unsubscribe();
-  }, []);
+  }, [authView]);
 
   // ==========================================
   // EFFECT: SINKRONISASI FIRESTORE DATABASE
   // ==========================================
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+       setIsDbReady(true);
+       return;
+    }
     const companiesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'companies');
     const obligationsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'obligations');
-
-    const seedDatabase = async () => {
-      try {
-        const batch = writeBatch(db);
-        INITIAL_COMPANIES.forEach(comp => {
-          const ref = doc(db, 'artifacts', appId, 'users', user.uid, 'companies', comp.id.toString());
-          batch.set(ref, comp);
-        });
-        Object.keys(INITIAL_OBLIGATIONS).forEach(compId => {
-          const ref = doc(db, 'artifacts', appId, 'users', user.uid, 'obligations', compId.toString());
-          batch.set(ref, { tasks: INITIAL_OBLIGATIONS[compId] });
-        });
-        await batch.commit();
-      } catch (err) {
-        console.error("Gagal Auto-seed Database:", err);
-      }
-    };
 
     const unsubCompanies = onSnapshot(companiesRef, (snap) => {
       const comps = [];
       snap.forEach(d => comps.push(d.data()));
-      if (snap.empty && !window.__hasSeededData) {
-        window.__hasSeededData = true;
-        seedDatabase();
-      } else {
-        setCompaniesData(comps);
-        setIsDbReady(true);
-      }
+      setCompaniesData(comps);
+      setIsDbReady(true);
     });
 
     const unsubObligations = onSnapshot(obligationsRef, (snap) => {
@@ -159,29 +116,43 @@ export default function App() {
     return () => { unsubCompanies(); unsubObligations(); };
   }, [user]);
 
-  useEffect(() => setCurrentPage(1), [searchTerm, filterCategory, filterStatus]);
-  useEffect(() => {
-    setSelectedDashboardStatus(null);
-    setSelectedPlantStatus(null);
-  }, [dashboardCategory, activeTab]);
-
-  const handleLoginSubmit = (e) => {
+  // ==========================================
+  // FUNGSI LOGIN RESMI
+  // ==========================================
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    setAuthView('app');
+    setLoginError('');
+    try {
+      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+    } catch (err) {
+      console.error(err);
+      setLoginError('Email atau kata sandi salah / tidak ditemukan!');
+    }
   };
 
-  const handleRegisterSubmit = (e) => {
+  // ==========================================
+  // FUNGSI LOGOUT RESMI
+  // ==========================================
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setAuthView('landing');
+      setActiveTab('dashboard');
+    } catch (err) {
+      console.error("Gagal Logout", err);
+    }
+  };
+
+  const handleRegisterSubmit = async (e) => {
     e.preventDefault();
-    const newUser = {
-      id: Date.now().toString(),
-      name: registeredName,
-      email: registeredEmail,
-      instance: registeredInstance,
-      role: 'User',
-      status: 'Pending'
-    };
-    setUsersData(prev => [newUser, ...prev]);
-    setAuthView('pending');
+    try {
+      await createUserWithEmailAndPassword(auth, registeredEmail, registeredPassword);
+      const newUser = { id: Date.now().toString(), name: registeredName, email: registeredEmail, instance: registeredInstance, role: 'User', status: 'Pending' };
+      setUsersData(prev => [newUser, ...prev]);
+      setAuthView('pending');
+    } catch(err) {
+      alert("Gagal mendaftar. Email mungkin sudah digunakan atau password terlalu pendek (min. 6 karakter).");
+    }
   };
 
   const handleApproveUser = (id) => {
@@ -221,62 +192,41 @@ export default function App() {
 
   const handleCompanyChange = (field, value) => setEditFormData((prev) => ({ ...prev, company: { ...prev.company, [field]: value } }));
   const handleTaskChange = (index, field, value) => {
-    setEditFormData((prev) => {
-      const newTasks = [...prev.tasks];
-      newTasks[index] = { ...newTasks[index], [field]: value };
-      return { ...prev, tasks: newTasks };
-    });
+    setEditFormData((prev) => { const newTasks = [...prev.tasks]; newTasks[index] = { ...newTasks[index], [field]: value }; return { ...prev, tasks: newTasks }; });
   };
 
-  const handleSimulateDownload = (fileName) => {
-    setDownloadToast(`Mengunduh dokumen: ${fileName}`);
-    setTimeout(() => setDownloadToast(''), 3500);
-  };
-
+  const handleSimulateDownload = (fileName) => { setDownloadToast(`Mengunduh dokumen: ${fileName}`); setTimeout(() => setDownloadToast(''), 3500); };
   const handleDownloadFromTable = (e, fileName) => { e.stopPropagation(); handleSimulateDownload(fileName); };
 
   const handleFileUpload = (taskIndex, field, file) => {
     if (!file) return;
-    setEditFormData((prev) => {
-      const newTasks = [...prev.tasks];
-      newTasks[taskIndex] = { ...newTasks[taskIndex], [field]: file.name };
-      return { ...prev, tasks: newTasks };
-    });
+    setEditFormData((prev) => { const newTasks = [...prev.tasks]; newTasks[taskIndex] = { ...newTasks[taskIndex], [field]: file.name }; return { ...prev, tasks: newTasks }; });
   };
 
   const handleAddTaskBlock = () => {
-    setEditFormData((prev) => ({
-      ...prev, tasks: [ ...prev.tasks, { id: Date.now(), task: 'Rehabilitasi DAS', sk_lokasi: '', lokasi: '', luas: '', status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [], riwayat_tanam: [], riwayat_serah_terima: [] } ]
-    }));
+    setEditFormData((prev) => ({ ...prev, tasks: [ ...prev.tasks, { id: Date.now(), task: 'Rehabilitasi DAS', sk_lokasi: '', lokasi: '', luas: '', status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [], riwayat_tanam: [], riwayat_serah_terima: [] } ] }));
   };
 
   const addHistory = (taskIndex, type) => {
     setEditFormData((prev) => {
-      const newTasks = [...prev.tasks];
-      const newHistory = [...(newTasks[taskIndex][type] || [])];
+      const newTasks = [...prev.tasks]; const newHistory = [...(newTasks[taskIndex][type] || [])];
       newHistory.push(type === 'riwayat_tanam' ? { id: Date.now(), tahun: new Date().getFullYear(), luas: '', status: 'P0' } : { id: Date.now(), tahun: new Date().getFullYear(), luas: '' });
-      newTasks[taskIndex][type] = newHistory;
-      return { ...prev, tasks: newTasks };
+      newTasks[taskIndex][type] = newHistory; return { ...prev, tasks: newTasks };
     });
   };
 
   const updateHistory = (taskIndex, type, histIndex, field, value) => {
     setEditFormData((prev) => {
-      const newTasks = [...prev.tasks];
-      const newHistory = [...newTasks[taskIndex][type]];
+      const newTasks = [...prev.tasks]; const newHistory = [...newTasks[taskIndex][type]];
       newHistory[histIndex] = { ...newHistory[histIndex], [field]: value };
-      newTasks[taskIndex][type] = newHistory;
-      return { ...prev, tasks: newTasks };
+      newTasks[taskIndex][type] = newHistory; return { ...prev, tasks: newTasks };
     });
   };
 
   const removeHistory = (taskIndex, type, histIndex) => {
     setEditFormData((prev) => {
-      const newTasks = [...prev.tasks];
-      const newHistory = [...newTasks[taskIndex][type]];
-      newHistory.splice(histIndex, 1);
-      newTasks[taskIndex][type] = newHistory;
-      return { ...prev, tasks: newTasks };
+      const newTasks = [...prev.tasks]; const newHistory = [...newTasks[taskIndex][type]];
+      newHistory.splice(histIndex, 1); newTasks[taskIndex][type] = newHistory; return { ...prev, tasks: newTasks };
     });
   };
 
@@ -293,7 +243,6 @@ export default function App() {
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 3000);
     } catch (err) {
-      console.error("Gagal Menyimpan ke Database:", err);
       alert("Terjadi kesalahan saat menyimpan data ke server.");
     }
   };
@@ -307,49 +256,28 @@ export default function App() {
           csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","-","-","0","0","0","0","0","0","0","${c.status}"\n`;
       } else {
           tasks.forEach(task => {
-              const totals = getTaskTotals(task);
-              const luasSK = Number(task.luas) || 0;
-              
+              const totals = getTaskTotals(task); const luasSK = Number(task.luas) || 0;
               let p0 = 0, p1 = 0, p2 = 0;
-              if (task.riwayat_tanam) {
-                task.riwayat_tanam.forEach(r => {
-                  const l = Number(r.luas) || 0;
-                  if (r.status === 'P0') p0 += l;
-                  else if (r.status === 'P1') p1 += l;
-                  else if (r.status === 'P2') p2 += l;
-                  else p0 += l; 
-                });
-              }
-
+              if (task.riwayat_tanam) { task.riwayat_tanam.forEach(r => { const l = Number(r.luas) || 0; if (r.status === 'P0') p0 += l; else if (r.status === 'P1') p1 += l; else if (r.status === 'P2') p2 += l; else p0 += l; }); }
               csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.luas_rkp}","${totals.realisasi_tanam}","${p0}","${p1}","${p2}","${totals.luas_serah_terima}","${task.status || c.status}"\n`;
           });
       }
     });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Data_Pemenuhan_Kewajiban_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const link = document.createElement("a"); const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url); link.setAttribute("download", `Data_Pemenuhan_Kewajiban_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
   const getStats = (cat) => {
     const data = cat === 'Semua' ? companiesData : companiesData.filter((c) => c.category === cat);
-    return {
-      total: data.length, tertib: data.filter((c) => c.status === 'Tertib').length,
-      sp1: data.filter((c) => c.status === 'SP1').length, sp2: data.filter((c) => c.status === 'SP2').length, sp3: data.filter((c) => c.status === 'SP3').length,
-    };
+    return { total: data.length, tertib: data.filter((c) => c.status === 'Tertib').length, sp1: data.filter((c) => c.status === 'SP1').length, sp2: data.filter((c) => c.status === 'SP2').length, sp3: data.filter((c) => c.status === 'SP3').length };
   };
 
   const entityCounts = useMemo(() => {
     let ppkh = 0; let pktmkh = 0;
     companiesData.forEach((c) => {
-      if (dashboardCategory === 'Semua' || c.category === dashboardCategory) {
-        if (c.category === 'PPKH') ppkh++;
-        if (c.category === 'PKTMKH') pktmkh++;
-      }
+      if (dashboardCategory === 'Semua' || c.category === dashboardCategory) { if (c.category === 'PPKH') ppkh++; if (c.category === 'PKTMKH') pktmkh++; }
     });
     return { ppkh, pktmkh };
   }, [dashboardCategory, companiesData]);
@@ -366,9 +294,7 @@ export default function App() {
           if (ob.task === 'Reklamasi Hutan') { totalReklamasi += Number(ob.luas) || 0; hasReklamasi = true; }
           if (ob.task === 'Reboisasi Areal Pengganti' || ob.task === 'Reboisasi') { totalReboisasi += Number(ob.luas) || 0; hasReboisasi = true; }
         });
-        if (hasDAS) countDAS++;
-        if (hasReklamasi) countReklamasi++;
-        if (hasReboisasi) countReboisasi++;
+        if (hasDAS) countDAS++; if (hasReklamasi) countReklamasi++; if (hasReboisasi) countReboisasi++;
       }
     });
     return { totalDAS, totalReklamasi, totalReboisasi, countDAS, countReklamasi, countReboisasi };
@@ -426,27 +352,15 @@ export default function App() {
     filteredCompanies.forEach(c => {
       const tasks = obligationsData[c.id] || [];
       tasks.forEach(task => {
-        if (task.riwayat_tanam) {
-          task.riwayat_tanam.forEach(r => {
-            const l = Number(r.luas) || 0;
-            if (r.status === 'P0') p0 += l; else if (r.status === 'P1') p1 += l; else if (r.status === 'P2') p2 += l; else p0 += l; 
-          });
-        }
+        if (task.riwayat_tanam) { task.riwayat_tanam.forEach(r => { const l = Number(r.luas) || 0; if (r.status === 'P0') p0 += l; else if (r.status === 'P1') p1 += l; else if (r.status === 'P2') p2 += l; else p0 += l; }); }
       });
     });
     const total = p0 + p1 + p2;
-    return {
-      p0, p1, p2, total, pctP0: total > 0 ? (p0 / total) * 100 : 0, pctP1: total > 0 ? (p1 / total) * 100 : 0, pctP2: total > 0 ? (p2 / total) * 100 : 0,
-    };
+    return { p0, p1, p2, total, pctP0: total > 0 ? (p0 / total) * 100 : 0, pctP1: total > 0 ? (p1 / total) * 100 : 0, pctP2: total > 0 ? (p2 / total) * 100 : 0 };
   }, [filteredCompanies, obligationsData]);
 
-  // ==========================================
-  // FITUR BARU: SMART EARLY WARNING SYSTEM (EWS) ENGINE
-  // ==========================================
   const smartAlerts = useMemo(() => {
-    const alerts = [];
-    const currentYear = new Date().getFullYear();
-    
+    const alerts = []; const currentYear = new Date().getFullYear();
     companiesData.forEach(c => {
       const tasks = obligationsData[c.id] || [];
       tasks.forEach(task => {
@@ -454,18 +368,11 @@ export default function App() {
           const currentStatus = task.status || c.status;
           const tanamYears = (task.riwayat_tanam || []).map(r => Number(r.tahun) || 0);
           const latestTanamYear = tanamYears.length > 0 ? Math.max(...tanamYears) : 0;
-          
           if (currentStatus === 'Tertib') {
-             if (latestTanamYear === 0) {
-                alerts.push({ id: `${c.id}-${task.id}-sp1-new`, company: c.name, type: 'SP1', message: `Belum ada realisasi tanam (P0) sejak SK diterbitkan. Evaluasi semester berpotensi SP1.` });
-             } else if (latestTanamYear < currentYear - 1) {
-                alerts.push({ id: `${c.id}-${task.id}-sp1`, company: c.name, type: 'SP1', message: `Tidak ada progres tanam baru sejak ${latestTanamYear}. Evaluasi semester berpotensi SP1.` });
-             }
-          } else if (currentStatus === 'SP1' && latestTanamYear < currentYear - 1) {
-             alerts.push({ id: `${c.id}-${task.id}-sp2`, company: c.name, type: 'SP2', message: `Masa peringatan SP1 habis tanpa progres tanam baru. Segera tingkatkan ke SP2.` });
-          } else if (currentStatus === 'SP2' && latestTanamYear < currentYear - 1) {
-             alerts.push({ id: `${c.id}-${task.id}-sp3`, company: c.name, type: 'SP3', message: `PERINGATAN KERAS! Status SP2 tanpa progres. Rekomendasi naik ke SP3 (Pencabutan Izin).` });
-          }
+             if (latestTanamYear === 0) { alerts.push({ id: `${c.id}-${task.id}-sp1-new`, company: c.name, type: 'SP1', message: `Belum ada realisasi tanam (P0) sejak SK diterbitkan. Evaluasi semester berpotensi SP1.` }); } 
+             else if (latestTanamYear < currentYear - 1) { alerts.push({ id: `${c.id}-${task.id}-sp1`, company: c.name, type: 'SP1', message: `Tidak ada progres tanam baru sejak ${latestTanamYear}. Evaluasi semester berpotensi SP1.` }); }
+          } else if (currentStatus === 'SP1' && latestTanamYear < currentYear - 1) { alerts.push({ id: `${c.id}-${task.id}-sp2`, company: c.name, type: 'SP2', message: `Masa peringatan SP1 habis tanpa progres tanam baru. Segera tingkatkan ke SP2.` });
+          } else if (currentStatus === 'SP2' && latestTanamYear < currentYear - 1) { alerts.push({ id: `${c.id}-${task.id}-sp3`, company: c.name, type: 'SP3', message: `PERINGATAN KERAS! Status SP2 tanpa progres. Rekomendasi naik ke SP3 (Pencabutan Izin).` }); }
         }
       });
     });
@@ -474,115 +381,23 @@ export default function App() {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Tertib': return 'bg-green-100 text-green-800 border-green-200';
-      case 'SP1': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'SP2': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'SP3': return 'bg-red-100 text-red-800 border-red-200';
-      case 'Active': return 'bg-green-100 text-green-800 border-green-200'; 
-      case 'Pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200'; 
+      case 'Tertib': return 'bg-green-100 text-green-800 border-green-200'; case 'SP1': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'SP2': return 'bg-orange-100 text-orange-800 border-orange-200'; case 'SP3': return 'bg-red-100 text-red-800 border-red-200';
+      case 'Active': return 'bg-green-100 text-green-800 border-green-200'; case 'Pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200'; 
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  // ==========================================
-  // FITUR BARU: FUNGSI CETAK LAPORAN PDF (PRINT WINDOW)
-  // ==========================================
   const printReport = (title, subtitle, headers, dataRows) => {
-    const printWindow = window.open('', '_blank');
-    const currentDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="id">
-        <head>
-          <meta charset="UTF-8">
-          <title>Cetak Laporan - ${title}</title>
-          <style>
-            body { font-family: 'Tahoma', sans-serif; color: #000; margin: 0; padding: 20px; font-size: 12px; }
-            .header-kop { text-align: center; border-bottom: 3px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-            .header-kop h1 { font-size: 16px; margin: 0; font-weight: bold; text-transform: uppercase; }
-            .header-kop h2 { font-size: 18px; margin: 5px 0; font-weight: bold; text-transform: uppercase; }
-            .header-kop p { font-size: 12px; margin: 0; }
-            .title-section { text-align: center; margin-bottom: 20px; }
-            .title-section h3 { font-size: 14px; margin: 0; text-decoration: underline; font-weight: bold; text-transform: uppercase; }
-            .title-section p { font-size: 12px; margin: 5px 0 0 0; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 11px; }
-            th, td { border: 1px solid #000; padding: 6px; text-align: left; }
-            th { background-color: #f2f2f2; text-align: center; font-weight: bold; vertical-align: middle; }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .footer-ttd { width: 100%; margin-top: 40px; display: flex; justify-content: flex-end; }
-            .signature-box { text-align: center; width: 250px; float: right; margin-right: 50px; }
-            .signature-box p { margin: 0; }
-            .signature-space { height: 70px; }
-            .signature-name { text-decoration: underline; font-weight: bold; }
-            @media print {
-              @page { size: A4 landscape; margin: 15mm; }
-              body { -webkit-print-color-adjust: exact; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header-kop">
-            <h1>KEMENTERIAN KEHUTANAN</h1>
-            <h1>DIREKTORAT JENDERAL PENGELOLAAN DAERAH ALIRAN SUNGAI DAN REHABILITASI HUTAN</h1>
-            <h2>BALAI PENGELOLAAN DAERAH ALIRAN SUNGAI KAHAYAN</h2>
-            <p>Jalan RTA. Milono Km 2,5 Kota Palangkaraya, Kalimantan Tengah</p>
-          </div>
-
-          <div class="title-section">
-            <h3>${title}</h3>
-            <p>${subtitle}</p>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                ${headers.map(h => `<th>${h}</th>`).join('')}
-              </tr>
-            </thead>
-            <tbody>
-              ${dataRows.map(row => `
-                <tr>
-                  ${row.map((cell, idx) => {
-                    const isNum = !isNaN(cell) && cell !== '' && cell !== '-';
-                    const alignClass = isNum ? 'text-right' : (idx === 0 || idx === 1 || idx === row.length-1 ? 'text-center' : '');
-                    return `<td class="${alignClass}">${cell}</td>`;
-                  }).join('')}
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-
-          <div class="footer-ttd">
-            <div class="signature-box">
-              <p>Palangka Raya, ${currentDate}</p>
-              <p>Kepala BPDAS Kahayan,</p>
-              <div class="signature-space"></div>
-              <p class="signature-name">( .................................................... )</p>
-              <p>NIP. ...............................................</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    printWindow.focus();
-    
-    setTimeout(() => {
-      printWindow.print();
-    }, 500);
+    const printWindow = window.open('', '_blank'); const currentDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    const htmlContent = `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Cetak Laporan - ${title}</title><style>body { font-family: 'Tahoma', sans-serif; color: #000; margin: 0; padding: 20px; font-size: 12px; } .header-kop { text-align: center; border-bottom: 3px solid #000; padding-bottom: 10px; margin-bottom: 20px; } .header-kop h1 { font-size: 16px; margin: 0; font-weight: bold; text-transform: uppercase; } .header-kop h2 { font-size: 18px; margin: 5px 0; font-weight: bold; text-transform: uppercase; } .header-kop p { font-size: 12px; margin: 0; } .title-section { text-align: center; margin-bottom: 20px; } .title-section h3 { font-size: 14px; margin: 0; text-decoration: underline; font-weight: bold; text-transform: uppercase; } .title-section p { font-size: 12px; margin: 5px 0 0 0; } table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 11px; } th, td { border: 1px solid #000; padding: 6px; text-align: left; } th { background-color: #f2f2f2; text-align: center; font-weight: bold; vertical-align: middle; } .text-center { text-align: center; } .text-right { text-align: right; } .footer-ttd { width: 100%; margin-top: 40px; display: flex; justify-content: flex-end; } .signature-box { text-align: center; width: 250px; float: right; margin-right: 50px; } .signature-box p { margin: 0; } .signature-space { height: 70px; } .signature-name { text-decoration: underline; font-weight: bold; } @media print { @page { size: A4 landscape; margin: 15mm; } body { -webkit-print-color-adjust: exact; } }</style></head><body><div class="header-kop"><h1>KEMENTERIAN KEHUTANAN</h1><h1>DIREKTORAT JENDERAL PENGELOLAAN DAERAH ALIRAN SUNGAI DAN REHABILITASI HUTAN</h1><h2>BALAI PENGELOLAAN DAERAH ALIRAN SUNGAI KAHAYAN</h2><p>Jalan RTA. Milono Km 2,5 Kota Palangkaraya, Kalimantan Tengah</p></div><div class="title-section"><h3>${title}</h3><p>${subtitle}</p></div><table><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${dataRows.map(row => `<tr>${row.map((cell, idx) => { const isNum = !isNaN(cell) && cell !== '' && cell !== '-'; const alignClass = isNum ? 'text-right' : (idx === 0 || idx === 1 || idx === row.length-1 ? 'text-center' : ''); return `<td class="${alignClass}">${cell}</td>`; }).join('')}</tr>`).join('')}</tbody></table><div class="footer-ttd"><div class="signature-box"><p>Palangka Raya, ${currentDate}</p><p>Kepala BPDAS Kahayan,</p><div class="signature-space"></div><p class="signature-name">( .................................................... )</p><p>NIP. ...............................................</p></div></div></body></html>`;
+    printWindow.document.write(htmlContent); printWindow.document.close(); printWindow.focus();
+    setTimeout(() => { printWindow.print(); }, 500);
   };
 
   const dashboardDetailCompanies = useMemo(() => {
     if (!selectedDashboardStatus) return [];
-    return companiesData.filter((c) => {
-      const matchesCat = dashboardCategory === 'Semua' || c.category === dashboardCategory;
-      const matchesStat = selectedDashboardStatus === 'Semua' ? true : c.status === selectedDashboardStatus;
-      return matchesCat && matchesStat;
-    });
+    return companiesData.filter((c) => { const matchesCat = dashboardCategory === 'Semua' || c.category === dashboardCategory; const matchesStat = selectedDashboardStatus === 'Semua' ? true : c.status === selectedDashboardStatus; return matchesCat && matchesStat; });
   }, [companiesData, dashboardCategory, selectedDashboardStatus]);
 
   const dashboardPlantStatusCompanies = useMemo(() => {
@@ -590,15 +405,8 @@ export default function App() {
     return companiesData.filter((c) => {
       const matchesCat = dashboardCategory === 'Semua' || c.category === dashboardCategory;
       if (!matchesCat) return false;
-      
       const tasks = obligationsData[c.id] || [];
-      return tasks.some(task => {
-        if (!task.riwayat_tanam) return false;
-        return task.riwayat_tanam.some(r => {
-          const status = r.status || 'P0';
-          return status === selectedPlantStatus && Number(r.luas) > 0;
-        });
-      });
+      return tasks.some(task => { if (!task.riwayat_tanam) return false; return task.riwayat_tanam.some(r => { const status = r.status || 'P0'; return status === selectedPlantStatus && Number(r.luas) > 0; }); });
     });
   }, [companiesData, dashboardCategory, obligationsData, selectedPlantStatus]);
 
@@ -607,155 +415,49 @@ export default function App() {
     let csvContent = headers.join(",") + "\n";
     dashboardDetailCompanies.forEach(c => {
       const tasks = obligationsData[c.id] || [];
-      if (tasks.length === 0) {
-          csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","-","-","0","0","0","0","0","0","${c.status}"\n`;
-      } else {
-          tasks.forEach(task => {
-              const totals = getTaskTotals(task);
-              const luasSK = Number(task.luas) || 0;
-
-              let p0 = 0, p1 = 0, p2 = 0;
-              if (task.riwayat_tanam) {
-                task.riwayat_tanam.forEach(r => {
-                  const l = Number(r.luas) || 0;
-                  if (r.status === 'P0') p0 += l;
-                  else if (r.status === 'P1') p1 += l;
-                  else if (r.status === 'P2') p2 += l;
-                  else p0 += l; 
-                });
-              }
-
-              csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${p0}","${p1}","${p2}","${totals.luas_serah_terima}","${task.status || c.status}"\n`;
-          });
-      }
+      if (tasks.length === 0) { csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","-","-","0","0","0","0","0","0","${c.status}"\n`;
+      } else { tasks.forEach(task => { const totals = getTaskTotals(task); const luasSK = Number(task.luas) || 0; let p0 = 0, p1 = 0, p2 = 0; if (task.riwayat_tanam) { task.riwayat_tanam.forEach(r => { const l = Number(r.luas) || 0; if (r.status === 'P0') p0 += l; else if (r.status === 'P1') p1 += l; else if (r.status === 'P2') p2 += l; else p0 += l; }); } csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${p0}","${p1}","${p2}","${totals.luas_serah_terima}","${task.status || c.status}"\n`; }); }
     });
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    const safeStatus = selectedDashboardStatus ? selectedDashboardStatus.replace(/\s+/g, '_') : 'Semua';
-    link.setAttribute("download", `Daftar_Perusahaan_${safeStatus}_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.setAttribute("href", url); const safeStatus = selectedDashboardStatus ? selectedDashboardStatus.replace(/\s+/g, '_') : 'Semua'; link.setAttribute("download", `Daftar_Perusahaan_${safeStatus}_${new Date().toISOString().slice(0,10)}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
   const printDashboardStatus = () => {
-    const title = "LAPORAN STATUS PEMENUHAN KEWAJIBAN PPKH DAN PKTMKH";
-    const safeStatus = selectedDashboardStatus === 'Semua' ? 'Seluruh Unit Aktif' : (selectedDashboardStatus === 'Tertib' ? 'Status Tertib' : `Peringatan ${selectedDashboardStatus}`);
-    const subtitle = `Filter Status: ${safeStatus} | Total Unit: ${dashboardDetailCompanies.length}`;
-    
+    const title = "LAPORAN STATUS PEMENUHAN KEWAJIBAN PPKH DAN PKTMKH"; const safeStatus = selectedDashboardStatus === 'Semua' ? 'Seluruh Unit Aktif' : (selectedDashboardStatus === 'Tertib' ? 'Status Tertib' : `Peringatan ${selectedDashboardStatus}`); const subtitle = `Filter Status: ${safeStatus} | Total Unit: ${dashboardDetailCompanies.length}`;
     const headers = ["No", "Nama Perusahaan", "Kategori", "No. SK Penetapan", "Luas SK (Ha)", "Tanam Total", "Luas P0", "Luas P1", "Luas P2", "Serah Terima", "Status"];
-    
-    let rows = [];
-    let counter = 1;
-
+    let rows = []; let counter = 1;
     dashboardDetailCompanies.forEach(c => {
       const tasks = obligationsData[c.id] || [];
-      if (tasks.length === 0) {
-          rows.push([counter++, c.name, c.category, '-', '0', '0', '0', '0', '0', '0', c.status]);
-      } else {
-          tasks.forEach(task => {
-              const totals = getTaskTotals(task);
-              const luasSK = Number(task.luas) || 0;
-              let p0 = 0, p1 = 0, p2 = 0;
-              if (task.riwayat_tanam) {
-                task.riwayat_tanam.forEach(r => {
-                  const l = Number(r.luas) || 0;
-                  if (r.status === 'P0') p0 += l; else if (r.status === 'P1') p1 += l; else if (r.status === 'P2') p2 += l; else p0 += l; 
-                });
-              }
-              rows.push([
-                counter++, c.name, c.category, task.sk_lokasi || '-', 
-                luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), 
-                p0.toLocaleString('id-ID'), p1.toLocaleString('id-ID'), p2.toLocaleString('id-ID'), 
-                totals.luas_serah_terima.toLocaleString('id-ID'), task.status || c.status
-              ]);
-          });
-      }
+      if (tasks.length === 0) { rows.push([counter++, c.name, c.category, '-', '0', '0', '0', '0', '0', '0', c.status]);
+      } else { tasks.forEach(task => { const totals = getTaskTotals(task); const luasSK = Number(task.luas) || 0; let p0 = 0, p1 = 0, p2 = 0; if (task.riwayat_tanam) { task.riwayat_tanam.forEach(r => { const l = Number(r.luas) || 0; if (r.status === 'P0') p0 += l; else if (r.status === 'P1') p1 += l; else if (r.status === 'P2') p2 += l; else p0 += l; }); } rows.push([ counter++, c.name, c.category, task.sk_lokasi || '-', luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), p0.toLocaleString('id-ID'), p1.toLocaleString('id-ID'), p2.toLocaleString('id-ID'), totals.luas_serah_terima.toLocaleString('id-ID'), task.status || c.status ]); }); }
     });
-
     printReport(title, subtitle, headers, rows);
   };
 
   const exportPlantStatusCSV = () => {
-    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam Total (Ha)", `Realisasi Khusus ${selectedPlantStatus} (Ha)`, "Status"];
-    let csvContent = headers.join(",") + "\n";
-    dashboardPlantStatusCompanies.forEach(c => {
-      const tasks = obligationsData[c.id] || [];
-      tasks.forEach(task => {
-        let specificArea = 0;
-        if (task.riwayat_tanam) {
-          task.riwayat_tanam.forEach(r => {
-            const s = r.status || 'P0';
-            if (s === selectedPlantStatus) specificArea += (Number(r.luas) || 0);
-          });
-        }
-        if (specificArea > 0) {
-           const totals = getTaskTotals(task);
-           const luasSK = Number(task.luas) || 0;
-           csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${specificArea}","${task.status || c.status}"\n`;
-        }
-      });
-    });
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Daftar_Perusahaan_${selectedPlantStatus}_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam Total (Ha)", `Realisasi Khusus ${selectedPlantStatus} (Ha)`, "Status"]; let csvContent = headers.join(",") + "\n";
+    dashboardPlantStatusCompanies.forEach(c => { const tasks = obligationsData[c.id] || []; tasks.forEach(task => { let specificArea = 0; if (task.riwayat_tanam) { task.riwayat_tanam.forEach(r => { const s = r.status || 'P0'; if (s === selectedPlantStatus) specificArea += (Number(r.luas) || 0); }); } if (specificArea > 0) { const totals = getTaskTotals(task); const luasSK = Number(task.luas) || 0; csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${specificArea}","${task.status || c.status}"\n`; } }); });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", `Daftar_Perusahaan_${selectedPlantStatus}_${new Date().toISOString().slice(0,10)}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
   const printPlantStatus = () => {
-    const title = "LAPORAN RINCIAN STATUS PEMELIHARAAN TANAMAN";
-    const statusName = selectedPlantStatus === 'P0' ? 'Tanaman Baru (P0)' : (selectedPlantStatus === 'P1' ? 'Pemeliharaan 1 (P1)' : 'Pemeliharaan 2+ (P2)');
-    const subtitle = `Filter Status: ${statusName} | Total Unit: ${dashboardPlantStatusCompanies.length}`;
-    
+    const title = "LAPORAN RINCIAN STATUS PEMELIHARAAN TANAMAN"; const statusName = selectedPlantStatus === 'P0' ? 'Tanaman Baru (P0)' : (selectedPlantStatus === 'P1' ? 'Pemeliharaan 1 (P1)' : 'Pemeliharaan 2+ (P2)'); const subtitle = `Filter Status: ${statusName} | Total Unit: ${dashboardPlantStatusCompanies.length}`;
     const headers = ["No", "Nama Perusahaan", "Kategori", "No. SK Penetapan", "Luas SK (Ha)", "Tanam Total (Ha)", `Luas ${selectedPlantStatus} (Ha)`, "Status Kepatuhan"];
-    
-    let rows = [];
-    let counter = 1;
-
-    dashboardPlantStatusCompanies.forEach(c => {
-      const tasks = obligationsData[c.id] || [];
-      tasks.forEach(task => {
-        let specificArea = 0;
-        if (task.riwayat_tanam) {
-          task.riwayat_tanam.forEach(r => {
-            const s = r.status || 'P0';
-            if (s === selectedPlantStatus) specificArea += (Number(r.luas) || 0);
-          });
-        }
-        if (specificArea > 0) {
-           const totals = getTaskTotals(task);
-           const luasSK = Number(task.luas) || 0;
-           rows.push([
-             counter++, c.name, c.category, task.sk_lokasi || '-', 
-             luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), 
-             specificArea.toLocaleString('id-ID'), task.status || c.status
-           ]);
-        }
-      });
-    });
-
+    let rows = []; let counter = 1;
+    dashboardPlantStatusCompanies.forEach(c => { const tasks = obligationsData[c.id] || []; tasks.forEach(task => { let specificArea = 0; if (task.riwayat_tanam) { task.riwayat_tanam.forEach(r => { const s = r.status || 'P0'; if (s === selectedPlantStatus) specificArea += (Number(r.luas) || 0); }); } if (specificArea > 0) { const totals = getTaskTotals(task); const luasSK = Number(task.luas) || 0; rows.push([ counter++, c.name, c.category, task.sk_lokasi || '-', luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), specificArea.toLocaleString('id-ID'), task.status || c.status ]); } }); });
     printReport(title, subtitle, headers, rows);
   };
 
   // ==========================================
-  // RENDER LAYAR LOADING
+  // RENDER: HALAMAN LOADING
   // ==========================================
-  if (!user || !isDbReady) {
+  if (!isDbReady && user) {
     return (
       <div className="flex flex-col h-screen w-screen bg-green-950 items-center justify-center text-white relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&q=80&w=2000')] bg-cover bg-center opacity-20"></div>
         <div className="relative z-10 flex flex-col items-center">
           <DatabaseZap className="w-20 h-20 text-green-400 mb-6 animate-pulse drop-shadow-lg" />
           <h1 className="text-2xl font-black tracking-[0.2em] mb-2 drop-shadow-md">BPDAS KAHAYAN</h1>
-          <p className="text-green-300 font-semibold uppercase tracking-wider text-[12px] flex items-center gap-2">
-            <Cloud className="w-4 h-4 animate-bounce" /> Menghubungkan Sistem...
-          </p>
+          <p className="text-green-300 font-semibold uppercase tracking-wider text-[12px] flex items-center gap-2"><Cloud className="w-4 h-4 animate-bounce" /> Menghubungkan Data...</p>
         </div>
       </div>
     );
@@ -767,36 +469,18 @@ export default function App() {
   if (authView === 'landing') {
     return (
       <div className="relative w-full h-screen flex flex-col items-center justify-center overflow-hidden font-sans">
-        <div className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-[20s] hover:scale-105"
-             style={{ backgroundImage: `url('https://images.unsplash.com/photo-1448375240586-882707db888b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80')` }}>
-        </div>
+        <div className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-[20s] hover:scale-105" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1448375240586-882707db888b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80')` }}></div>
         <div className="absolute inset-0 bg-green-950/70 bg-gradient-to-b from-green-900/80 to-green-950/90"></div>
-
         <div className="relative z-10 text-center px-6 max-w-5xl flex flex-col items-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
-          <div className="w-24 h-24 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mb-8 border border-white/20 shadow-[0_0_40px_rgba(74,222,128,0.3)]">
-            <Sprout className="w-12 h-12 text-green-400" />
-          </div>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-lg">
-            Sistem Monitoring dan Pengawasan Pemenuhan Kewajiban <br className="hidden lg:block"/>
-            <span className="text-green-400">Pemegang PPKH dan PKTMKH</span>
-          </h1>
-          <p className="text-lg md:text-xl text-green-100 mb-12 tracking-wide font-medium max-w-3xl">
-            Di Wilayah Kerja BPDAS Kahayan
-          </p>
-          
+          <div className="w-24 h-24 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mb-8 border border-white/20 shadow-[0_0_40px_rgba(74,222,128,0.3)]"><Sprout className="w-12 h-12 text-green-400" /></div>
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-lg">Sistem Monitoring dan Pengawasan Pemenuhan Kewajiban <br className="hidden lg:block"/><span className="text-green-400">Pemegang PPKH dan PKTMKH</span></h1>
+          <p className="text-lg md:text-xl text-green-100 mb-12 tracking-wide font-medium max-w-3xl">Di Wilayah Kerja BPDAS Kahayan</p>
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-            <button onClick={() => setAuthView('login')} className="px-8 py-3.5 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg text-lg transition-all shadow-[0_0_20px_rgba(22,163,74,0.4)] hover:shadow-[0_0_30px_rgba(22,163,74,0.6)] flex items-center justify-center gap-2">
-              <Lock className="w-5 h-5" /> Masuk Aplikasi
-            </button>
-            <button onClick={() => setAuthView('register')} className="px-8 py-3.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/30 text-white font-bold rounded-lg text-lg transition-all flex items-center justify-center gap-2">
-              <User className="w-5 h-5" /> Daftar Akun Baru
-            </button>
+            <button onClick={() => setAuthView('login')} className="px-8 py-3.5 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg text-lg transition-all shadow-[0_0_20px_rgba(22,163,74,0.4)] hover:shadow-[0_0_30px_rgba(22,163,74,0.6)] flex items-center justify-center gap-2"><Lock className="w-5 h-5" /> Masuk Aplikasi</button>
+            <button onClick={() => setAuthView('register')} className="px-8 py-3.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/30 text-white font-bold rounded-lg text-lg transition-all flex items-center justify-center gap-2"><User className="w-5 h-5" /> Daftar Akun Baru</button>
           </div>
         </div>
-        
-        <div className="absolute bottom-6 text-white/50 text-xs font-semibold tracking-widest uppercase">
-          Kementerian Kehutanan RI
-        </div>
+        <div className="absolute bottom-6 text-white/50 text-xs font-semibold tracking-widest uppercase">Kementerian Kehutanan RI</div>
       </div>
     );
   }
@@ -807,59 +491,36 @@ export default function App() {
   if (authView === 'login' || authView === 'register') {
     return (
       <div className="relative w-full h-screen flex items-center justify-center bg-gray-100 font-sans p-6">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1448375240586-882707db888b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80')] bg-cover bg-center opacity-10"></div>
-        <div className="absolute inset-0 bg-green-950/90"></div>
-        
+        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1448375240586-882707db888b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80')] bg-cover bg-center opacity-10"></div><div className="absolute inset-0 bg-green-950/90"></div>
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
           <div className="bg-green-800 p-6 text-center relative">
-            <button onClick={() => setAuthView('landing')} className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-green-200 hover:text-white hover:bg-green-700 rounded-full transition-colors">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <Sprout className="w-10 h-10 text-green-400 mx-auto mb-2" />
-            <h2 className="text-xl font-bold text-white uppercase tracking-wider">{authView === 'login' ? 'Login Portal' : 'Registrasi Akun'}</h2>
+            <button onClick={() => setAuthView('landing')} className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-green-200 hover:text-white hover:bg-green-700 rounded-full transition-colors"><ArrowLeft className="w-5 h-5" /></button>
+            <Sprout className="w-10 h-10 text-green-400 mx-auto mb-2" /><h2 className="text-xl font-bold text-white uppercase tracking-wider">{authView === 'login' ? 'Login Portal' : 'Registrasi Akun'}</h2>
           </div>
-          
           <div className="p-8">
+            {/* Peringatan Error Login */}
+            {loginError && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 animate-in fade-in">
+                <ShieldAlert className="w-5 h-5" /> {loginError}
+              </div>
+            )}
+
             {authView === 'login' ? (
               <form onSubmit={handleLoginSubmit} className="space-y-5">
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Email Terdaftar</label>
-                  <div className="relative"><Mail className="w-5 h-5 absolute left-3 top-3 text-gray-400" /><input type="email" required className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50" placeholder="admin@perusahaan.com" /></div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Kata Sandi</label>
-                  <div className="relative"><Lock className="w-5 h-5 absolute left-3 top-3 text-gray-400" /><input type="password" required className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50" placeholder="••••••••" /></div>
-                </div>
-                <button type="submit" className="w-full py-3 mt-4 bg-green-700 hover:bg-green-800 text-white font-bold rounded-lg transition-colors shadow-md">Masuk Sekarang</button>
+                <div><label className="block text-xs font-bold text-gray-600 uppercase mb-2">Email Terdaftar</label><div className="relative"><Mail className="w-5 h-5 absolute left-3 top-3 text-gray-400" /><input type="email" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50" placeholder="admin@bpdas.go.id" /></div></div>
+                <div><label className="block text-xs font-bold text-gray-600 uppercase mb-2">Kata Sandi</label><div className="relative"><Lock className="w-5 h-5 absolute left-3 top-3 text-gray-400" /><input type="password" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50" placeholder="••••••••" /></div></div>
+                <button type="submit" className="w-full py-3 mt-4 bg-green-700 hover:bg-green-800 text-white font-bold rounded-lg transition-colors shadow-md flex items-center justify-center gap-2"><Lock className="w-4 h-4" /> Masuk Sekarang</button>
               </form>
             ) : (
               <form onSubmit={handleRegisterSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Nama Lengkap</label>
-                  <div className="relative"><User className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="text" required onChange={(e) => setRegisteredName(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-[13px]" placeholder="Nama Anda" /></div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Asal Instansi/Perusahaan</label>
-                  <div className="relative"><Database className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="text" required onChange={(e) => setRegisteredInstance(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-[13px]" placeholder="PT. Contoh Makmur" /></div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Email Kantor</label>
-                  <div className="relative"><Mail className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="email" required onChange={(e) => setRegisteredEmail(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-[13px]" placeholder="email@perusahaan.com" /></div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Kata Sandi</label>
-                  <div className="relative"><Lock className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="password" required className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-[13px]" placeholder="Buat kata sandi" /></div>
-                </div>
+                <div><label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Nama Lengkap</label><div className="relative"><User className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="text" required onChange={(e) => setRegisteredName(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-[13px]" placeholder="Nama Anda" /></div></div>
+                <div><label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Asal Instansi/Perusahaan</label><div className="relative"><Database className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="text" required onChange={(e) => setRegisteredInstance(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-[13px]" placeholder="PT. Contoh Makmur" /></div></div>
+                <div><label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Email Kantor</label><div className="relative"><Mail className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="email" required onChange={(e) => setRegisteredEmail(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-[13px]" placeholder="email@perusahaan.com" /></div></div>
+                <div><label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Kata Sandi (Min 6 Karakter)</label><div className="relative"><Lock className="w-4 h-4 absolute left-3 top-3 text-gray-400" /><input type="password" required minLength={6} onChange={(e) => setRegisteredPassword(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-600 bg-gray-50 text-[13px]" placeholder="Buat kata sandi" /></div></div>
                 <button type="submit" className="w-full py-3 mt-4 bg-green-700 hover:bg-green-800 text-white font-bold rounded-lg transition-colors shadow-md">Ajukan Pendaftaran</button>
               </form>
             )}
-            
-            <p className="text-center text-xs text-gray-500 mt-6 font-semibold">
-              {authView === 'login' ? "Belum punya akun?" : "Sudah memiliki akun?"} 
-              <button onClick={() => setAuthView(authView === 'login' ? 'register' : 'login')} className="ml-1 text-green-700 hover:underline focus:outline-none">
-                {authView === 'login' ? "Daftar di sini" : "Login di sini"}
-              </button>
-            </p>
+            <p className="text-center text-xs text-gray-500 mt-6 font-semibold">{authView === 'login' ? "Belum punya akun?" : "Sudah memiliki akun?"} <button onClick={() => {setAuthView(authView === 'login' ? 'register' : 'login'); setLoginError('');}} className="ml-1 text-green-700 hover:underline focus:outline-none">{authView === 'login' ? "Daftar di sini" : "Login di sini"}</button></p>
           </div>
         </div>
       </div>
@@ -873,24 +534,10 @@ export default function App() {
     return (
       <div className="w-full h-screen flex items-center justify-center bg-gray-50 p-6 font-sans">
          <div className="bg-white p-10 rounded-2xl shadow-lg max-w-lg text-center border border-gray-200 animate-in zoom-in-95">
-            <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-6">
-               <Activity className="w-10 h-10 text-yellow-600 animate-pulse" />
-            </div>
+            <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-6"><Activity className="w-10 h-10 text-yellow-600 animate-pulse" /></div>
             <h2 className="text-2xl font-black text-gray-800 mb-3">Pendaftaran Berhasil!</h2>
-            <p className="text-gray-600 mb-8 leading-relaxed">
-               Halo <strong>{registeredName || 'Pengguna'}</strong>, akun Anda sedang dalam proses verifikasi. 
-               Untuk alasan keamanan, <strong>data *Dashboard* hanya akan tampil setelah disetujui oleh Admin BPDAS Kahayan.</strong>
-               <br/><br/>Harap cek email Anda secara berkala.
-            </p>
-            <div className="flex flex-col gap-3">
-               <button onClick={() => setAuthView('landing')} className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg transition-colors">
-                 Kembali ke Halaman Depan
-               </button>
-               {/* TOMBOL RAHASIA UNTUK KEMUDAHAN TESTING (BYPASS SBG ADMIN) */}
-               <button onClick={() => setAuthView('app')} className="w-full py-3 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 font-bold rounded-lg transition-colors text-xs flex items-center justify-center gap-2" title="Bypass untuk menguji fitur Admin Panel">
-                 <CheckCircle className="w-4 h-4"/> [Bypass Developer] Masuk sebagai Admin
-               </button>
-            </div>
+            <p className="text-gray-600 mb-8 leading-relaxed">Halo <strong>{registeredName || 'Pengguna'}</strong>, akun Anda sedang dalam proses verifikasi. Untuk alasan keamanan, <strong>data Dashboard hanya akan tampil setelah disetujui oleh Admin BPDAS Kahayan.</strong><br/><br/>Harap cek email Anda secara berkala.</p>
+            <button onClick={handleLogout} className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg transition-colors">Kembali ke Halaman Depan</button>
          </div>
       </div>
     );
@@ -905,19 +552,11 @@ export default function App() {
       <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-green-900 flex flex-col shadow-xl shrink-0 z-20 text-white relative transition-all duration-300 ease-in-out`}>
         <div className="flex flex-col items-center justify-center pt-8 pb-6 border-b border-green-800 shrink-0 group cursor-default h-[140px]">
           <Sprout className={`${isSidebarOpen ? 'w-16 h-16 mb-4' : 'w-8 h-8'} text-green-400 drop-shadow-md transition-all duration-300`} />
-          {isSidebarOpen && (
-             <h1 className="font-bold text-[16px] text-white tracking-[0.1em] text-center whitespace-nowrap overflow-hidden opacity-100 transition-opacity duration-300" style={{ textShadow: "1px 1px 3px rgba(0,0,0,0.5)" }}>
-               BPDAS KAHAYAN
-             </h1>
-          )}
+          {isSidebarOpen && (<h1 className="font-bold text-[16px] text-white tracking-[0.1em] text-center whitespace-nowrap overflow-hidden opacity-100 transition-opacity duration-300" style={{ textShadow: "1px 1px 3px rgba(0,0,0,0.5)" }}>BPDAS KAHAYAN</h1>)}
         </div>
         
         <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto overflow-x-hidden">
-          {isSidebarOpen ? (
-             <p className="px-3 text-[11px] font-semibold text-green-300 uppercase tracking-widest mb-3 mt-2 whitespace-nowrap">Menu Utama</p>
-          ) : (
-             <div className="h-px bg-green-700 w-8 mx-auto my-4"></div>
-          )}
+          {isSidebarOpen ? (<p className="px-3 text-[11px] font-semibold text-green-300 uppercase tracking-widest mb-3 mt-2 whitespace-nowrap">Menu Utama</p>) : (<div className="h-px bg-green-700 w-8 mx-auto my-4"></div>)}
           
           <button onClick={() => { setActiveTab('dashboard'); setSelectedCompany(null); setEditFormData(null); }} title="Dashboard" className={`flex items-center w-full py-3 rounded-md transition-all ${isSidebarOpen ? 'px-4 justify-start' : 'justify-center'} ${activeTab === 'dashboard' ? 'bg-green-800 text-white border-l-4 border-green-400 shadow-md font-semibold' : 'text-green-100 hover:bg-green-800/50 hover:text-white'}`}>
              <LayoutDashboard className={`w-5 h-5 ${isSidebarOpen ? 'mr-3' : ''}`} /> 
@@ -929,22 +568,14 @@ export default function App() {
              {isSidebarOpen && <span className="whitespace-nowrap">Manajemen Data</span>}
           </button>
 
-          {isSidebarOpen ? (
-             <p className="px-3 text-[11px] font-semibold text-green-300 uppercase tracking-widest mb-3 mt-6 whitespace-nowrap">Analitik</p>
-          ) : (
-             <div className="h-px bg-green-700 w-8 mx-auto my-6"></div>
-          )}
+          {isSidebarOpen ? (<p className="px-3 text-[11px] font-semibold text-green-300 uppercase tracking-widest mb-3 mt-6 whitespace-nowrap">Analitik</p>) : (<div className="h-px bg-green-700 w-8 mx-auto my-6"></div>)}
           
           <button onClick={() => { setActiveTab('visualization'); setSelectedCompany(null); setEditFormData(null); }} title="Progres per Unit" className={`flex items-center w-full py-3 rounded-md transition-all ${isSidebarOpen ? 'px-4 justify-start' : 'justify-center'} ${activeTab === 'visualization' ? 'bg-green-800 text-white border-l-4 border-green-400 shadow-md font-semibold' : 'text-green-100 hover:bg-green-800/50 hover:text-white'}`}>
              <BarChart3 className={`w-5 h-5 ${isSidebarOpen ? 'mr-3' : ''}`} /> 
              {isSidebarOpen && <span className="whitespace-nowrap">Progres per Unit</span>}
           </button>
 
-          {isSidebarOpen ? (
-             <p className="px-3 text-[11px] font-semibold text-green-300 uppercase tracking-widest mb-3 mt-6 whitespace-nowrap">Sistem</p>
-          ) : (
-             <div className="h-px bg-green-700 w-8 mx-auto my-6"></div>
-          )}
+          {isSidebarOpen ? (<p className="px-3 text-[11px] font-semibold text-green-300 uppercase tracking-widest mb-3 mt-6 whitespace-nowrap">Sistem</p>) : (<div className="h-px bg-green-700 w-8 mx-auto my-6"></div>)}
           
           <button onClick={() => { setActiveTab('users'); setSelectedCompany(null); setEditFormData(null); }} title="Manajemen Pengguna" className={`flex items-center w-full py-3 rounded-md transition-all ${isSidebarOpen ? 'px-4 justify-start' : 'justify-center'} ${activeTab === 'users' ? 'bg-green-800 text-white border-l-4 border-green-400 shadow-md font-semibold' : 'text-green-100 hover:bg-green-800/50 hover:text-white'}`}>
              <Users className={`w-5 h-5 ${isSidebarOpen ? 'mr-3' : ''}`} /> 
@@ -960,13 +591,11 @@ export default function App() {
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden relative bg-gray-100">
-        
         <header className="bg-white border-b border-gray-200 flex items-center justify-between px-6 py-4 shrink-0 z-10 shadow-sm transition-all">
           <div className="flex items-center gap-5">
              <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 -ml-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-green-700 transition-colors focus:outline-none">
                <Menu className="w-6 h-6" />
              </button>
-             
              <div className="flex flex-col">
                 <h2 className="text-[16px] md:text-[19px] font-black text-gray-800 uppercase tracking-tight leading-tight hidden sm:block">
                   Sistem Pengawasan PPKH & PKTMKH
@@ -975,7 +604,7 @@ export default function App() {
                   Pengawasan PPKH
                 </h2>
                 <p className="text-[11px] md:text-[12px] font-bold text-green-700 tracking-widest mt-0.5 flex items-center gap-1.5">
-                  BPDAS KAHAYAN <span className="bg-green-100 text-green-800 px-1.5 py-0.5 rounded text-[9px] uppercase border border-green-200">Cloud Sync Aktif</span>
+                  BPDAS KAHAYAN <span className="bg-green-100 text-green-800 px-1.5 py-0.5 rounded text-[9px] uppercase border border-green-200"><Lock className="w-2.5 h-2.5 inline"/> Login Resmi v2.0</span>
                 </p>
              </div>
           </div>
@@ -1006,11 +635,7 @@ export default function App() {
                    </div>
                    <div className="max-h-80 overflow-y-auto">
                      {smartAlerts.length > 0 ? smartAlerts.map(alert => (
-                       <div 
-                         key={alert.id} 
-                         className="p-3 border-b border-gray-50 hover:bg-red-50/50 transition-colors cursor-pointer" 
-                         onClick={() => { setActiveTab('companies'); setSearchTerm(alert.company); setIsNotifOpen(false); }}
-                       >
+                       <div key={alert.id} className="p-3 border-b border-gray-50 hover:bg-red-50/50 transition-colors cursor-pointer" onClick={() => { setActiveTab('companies'); setSearchTerm(alert.company); setIsNotifOpen(false); }}>
                          <div className="flex justify-between items-start mb-1">
                            <p className="font-bold text-[12px] text-gray-800 truncate pr-2">{alert.company}</p>
                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase whitespace-nowrap ${alert.type === 'SP3' ? 'bg-red-100 text-red-700 border-red-200' : (alert.type === 'SP2' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200')}`}>
@@ -1033,16 +658,16 @@ export default function App() {
              
              <div className="flex items-center gap-3 pl-4 border-l border-gray-200 cursor-pointer group relative">
                <div className="hidden md:flex flex-col text-right">
-                 <span className="text-[13px] font-bold text-gray-800 leading-none truncate max-w-[120px]">{registeredName || 'Superadmin'}</span>
+                 <span className="text-[13px] font-bold text-gray-800 leading-none truncate max-w-[120px]">{user?.email || 'Admin'}</span>
                  <span className="text-[10px] font-bold text-green-600 uppercase tracking-wider mt-1 flex items-center gap-1 justify-end"><ShieldAlert className="w-3 h-3"/> Akses Penuh</span>
                </div>
                <div className="w-10 h-10 rounded-full bg-green-100 border-2 border-green-300 flex items-center justify-center font-bold text-green-800 shadow-sm group-hover:bg-green-200 group-hover:border-green-400 transition-colors">
-                 {registeredName ? registeredName.substring(0,1).toUpperCase() : 'A'}
+                 {(user?.email || 'A').substring(0,1).toUpperCase()}
                </div>
                
                <div className="absolute right-0 top-12 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 hidden group-hover:block z-50">
-                  <button onClick={() => setAuthView('landing')} className="w-full text-left px-4 py-2 text-[13px] font-bold text-red-600 hover:bg-red-50 transition-colors">
-                    Keluar / Logout
+                  <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-[13px] font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2">
+                    <ArrowLeft className="w-4 h-4"/> Keluar / Logout
                   </button>
                </div>
              </div>
@@ -1259,7 +884,7 @@ export default function App() {
                       <div className="h-40 flex items-end gap-2 pt-4 border-b border-gray-300">
                         {yearlyProgress.yearsList.map(year => {
                           const val = yearlyProgress.data.rkp[year] || 0;
-                          const heightPct = (val / yearlyProgress.maxRKP) * 100;
+                          const heightPct = yearlyProgress.maxRKP > 0 ? (val / yearlyProgress.maxRKP) * 100 : 0;
                           return (
                             <div key={`rkp-${year}`} className="flex flex-col items-center flex-1 h-full justify-end group relative">
                               <span className={`text-[10px] font-bold text-blue-700 absolute -top-5 transition-opacity ${val > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>{val.toLocaleString()}</span>
@@ -1285,7 +910,7 @@ export default function App() {
                       <div className="h-40 flex items-end gap-2 pt-4 border-b border-gray-300">
                         {yearlyProgress.yearsList.map(year => {
                           const val = yearlyProgress.data.tanam[year] || 0;
-                          const heightPct = (val / yearlyProgress.maxTanam) * 100;
+                          const heightPct = yearlyProgress.maxTanam > 0 ? (val / yearlyProgress.maxTanam) * 100 : 0;
                           return (
                             <div key={`tnm-${year}`} className="flex flex-col items-center flex-1 h-full justify-end group relative">
                               <span className={`text-[10px] font-bold text-green-700 absolute -top-5 transition-opacity ${val > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>{val.toLocaleString()}</span>
@@ -1311,7 +936,7 @@ export default function App() {
                       <div className="h-40 flex items-end gap-2 pt-4 border-b border-gray-300">
                         {yearlyProgress.yearsList.map(year => {
                           const val = yearlyProgress.data.st[year] || 0;
-                          const heightPct = (val / yearlyProgress.maxST) * 100;
+                          const heightPct = yearlyProgress.maxST > 0 ? (val / yearlyProgress.maxST) * 100 : 0;
                           return (
                             <div key={`st-${year}`} className="flex flex-col items-center flex-1 h-full justify-end group relative">
                               <span className={`text-[10px] font-bold text-orange-700 absolute -top-5 transition-opacity ${val > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>{val.toLocaleString()}</span>
@@ -1370,30 +995,21 @@ export default function App() {
                   <div>
                     <p className="text-[12px] text-gray-500 mb-3 italic">Klik salah satu kartu di bawah ini untuk melihat detail perusahaan berdasarkan status tanaman.</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div 
-                         onClick={() => setSelectedPlantStatus(selectedPlantStatus === 'P0' ? null : 'P0')}
-                         className={`bg-sky-50 border p-4 rounded-md flex items-center gap-4 cursor-pointer hover:shadow-md transition-all ${selectedPlantStatus === 'P0' ? 'ring-2 ring-sky-400 border-sky-300' : 'border-sky-100'}`}
-                      >
+                      <div onClick={() => setSelectedPlantStatus(selectedPlantStatus === 'P0' ? null : 'P0')} className={`bg-sky-50 border p-4 rounded-md flex items-center gap-4 cursor-pointer hover:shadow-md transition-all ${selectedPlantStatus === 'P0' ? 'ring-2 ring-sky-400 border-sky-300' : 'border-sky-100'}`}>
                         <div className="w-3 h-12 bg-sky-500 rounded-full"></div>
                         <div>
                           <p className="text-xs font-bold text-sky-800 uppercase tracking-wide">Tanaman Baru (P0)</p>
                           <p className="text-2xl font-black text-sky-900 mt-0.5">{plantStatusStats.p0.toLocaleString('id-ID')} <span className="text-sm font-semibold text-sky-700">Ha</span></p>
                         </div>
                       </div>
-                      <div 
-                         onClick={() => setSelectedPlantStatus(selectedPlantStatus === 'P1' ? null : 'P1')}
-                         className={`bg-teal-50 border p-4 rounded-md flex items-center gap-4 cursor-pointer hover:shadow-md transition-all ${selectedPlantStatus === 'P1' ? 'ring-2 ring-teal-400 border-teal-300' : 'border-teal-100'}`}
-                      >
+                      <div onClick={() => setSelectedPlantStatus(selectedPlantStatus === 'P1' ? null : 'P1')} className={`bg-teal-50 border p-4 rounded-md flex items-center gap-4 cursor-pointer hover:shadow-md transition-all ${selectedPlantStatus === 'P1' ? 'ring-2 ring-teal-400 border-teal-300' : 'border-teal-100'}`}>
                         <div className="w-3 h-12 bg-teal-500 rounded-full"></div>
                         <div>
                           <p className="text-xs font-bold text-teal-800 uppercase tracking-wide">Pemeliharaan 1 (P1)</p>
                           <p className="text-2xl font-black text-teal-900 mt-0.5">{plantStatusStats.p1.toLocaleString('id-ID')} <span className="text-sm font-semibold text-teal-700">Ha</span></p>
                         </div>
                       </div>
-                      <div 
-                         onClick={() => setSelectedPlantStatus(selectedPlantStatus === 'P2' ? null : 'P2')}
-                         className={`bg-emerald-50 border p-4 rounded-md flex items-center gap-4 cursor-pointer hover:shadow-md transition-all ${selectedPlantStatus === 'P2' ? 'ring-2 ring-emerald-400 border-emerald-300' : 'border-emerald-100'}`}
-                      >
+                      <div onClick={() => setSelectedPlantStatus(selectedPlantStatus === 'P2' ? null : 'P2')} className={`bg-emerald-50 border p-4 rounded-md flex items-center gap-4 cursor-pointer hover:shadow-md transition-all ${selectedPlantStatus === 'P2' ? 'ring-2 ring-emerald-400 border-emerald-300' : 'border-emerald-100'}`}>
                         <div className="w-3 h-12 bg-emerald-700 rounded-full"></div>
                         <div>
                           <p className="text-xs font-bold text-emerald-900 uppercase tracking-wide">Pemeliharaan 2+ (P2)</p>
@@ -1451,7 +1067,6 @@ export default function App() {
                                     if (s === selectedPlantStatus) specificArea += (Number(r.luas) || 0);
                                   });
                                 }
-
                                 if (specificArea === 0) return null;
 
                                 const totals = getTaskTotals(taskData);
@@ -1497,38 +1112,23 @@ export default function App() {
                    </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                  <div 
-                     onClick={() => setSelectedDashboardStatus('Semua')}
-                     className={`bg-white p-5 rounded-lg border shadow-sm border-t-4 border-t-gray-500 col-span-2 md:col-span-1 lg:col-span-1 cursor-pointer hover:shadow-md transition-all ${selectedDashboardStatus === 'Semua' ? 'ring-2 ring-gray-400 bg-gray-50' : 'border-gray-200'}`}
-                  >
+                  <div onClick={() => setSelectedDashboardStatus('Semua')} className={`bg-white p-5 rounded-lg border shadow-sm border-t-4 border-t-gray-500 col-span-2 md:col-span-1 lg:col-span-1 cursor-pointer hover:shadow-md transition-all ${selectedDashboardStatus === 'Semua' ? 'ring-2 ring-gray-400 bg-gray-50' : 'border-gray-200'}`}>
                     <p className="text-[11px] font-bold text-gray-500 uppercase mb-2">Total Unit Aktif</p>
                     <p className="text-3xl font-bold text-gray-900">{currentStats.total}</p>
                   </div>
-                  <div 
-                     onClick={() => setSelectedDashboardStatus('Tertib')}
-                     className={`bg-white p-5 rounded-lg border shadow-sm border-t-4 border-t-green-500 cursor-pointer hover:shadow-md transition-all ${selectedDashboardStatus === 'Tertib' ? 'ring-2 ring-green-400 bg-green-50' : 'border-gray-200'}`}
-                  >
+                  <div onClick={() => setSelectedDashboardStatus('Tertib')} className={`bg-white p-5 rounded-lg border shadow-sm border-t-4 border-t-green-500 cursor-pointer hover:shadow-md transition-all ${selectedDashboardStatus === 'Tertib' ? 'ring-2 ring-green-400 bg-green-50' : 'border-gray-200'}`}>
                     <p className="text-[11px] font-bold text-green-700 uppercase mb-2">Tertib</p>
                     <p className="text-3xl font-bold text-gray-900">{currentStats.tertib}</p>
                   </div>
-                  <div 
-                     onClick={() => setSelectedDashboardStatus('SP1')}
-                     className={`bg-white p-5 rounded-lg border shadow-sm border-t-4 border-t-yellow-500 cursor-pointer hover:shadow-md transition-all ${selectedDashboardStatus === 'SP1' ? 'ring-2 ring-yellow-400 bg-yellow-50' : 'border-gray-200'}`}
-                  >
+                  <div onClick={() => setSelectedDashboardStatus('SP1')} className={`bg-white p-5 rounded-lg border shadow-sm border-t-4 border-t-yellow-500 cursor-pointer hover:shadow-md transition-all ${selectedDashboardStatus === 'SP1' ? 'ring-2 ring-yellow-400 bg-yellow-50' : 'border-gray-200'}`}>
                     <p className="text-[11px] font-bold text-yellow-700 uppercase mb-2">Peringatan SP1</p>
                     <p className="text-3xl font-bold text-gray-900">{currentStats.sp1}</p>
                   </div>
-                  <div 
-                     onClick={() => setSelectedDashboardStatus('SP2')}
-                     className={`bg-white p-5 rounded-lg border shadow-sm border-t-4 border-t-orange-500 cursor-pointer hover:shadow-md transition-all ${selectedDashboardStatus === 'SP2' ? 'ring-2 ring-orange-400 bg-orange-50' : 'border-gray-200'}`}
-                  >
+                  <div onClick={() => setSelectedDashboardStatus('SP2')} className={`bg-white p-5 rounded-lg border shadow-sm border-t-4 border-t-orange-500 cursor-pointer hover:shadow-md transition-all ${selectedDashboardStatus === 'SP2' ? 'ring-2 ring-orange-400 bg-orange-50' : 'border-gray-200'}`}>
                     <p className="text-[11px] font-bold text-orange-700 uppercase mb-2">Peringatan SP2</p>
                     <p className="text-3xl font-bold text-gray-900">{currentStats.sp2}</p>
                   </div>
-                  <div 
-                     onClick={() => setSelectedDashboardStatus('SP3')}
-                     className={`bg-white p-5 rounded-lg border shadow-sm border-t-4 border-t-red-600 cursor-pointer hover:shadow-md transition-all ${selectedDashboardStatus === 'SP3' ? 'ring-2 ring-red-400 bg-red-50' : 'border-gray-200'}`}
-                  >
+                  <div onClick={() => setSelectedDashboardStatus('SP3')} className={`bg-white p-5 rounded-lg border shadow-sm border-t-4 border-t-red-600 cursor-pointer hover:shadow-md transition-all ${selectedDashboardStatus === 'SP3' ? 'ring-2 ring-red-400 bg-red-50' : 'border-gray-200'}`}>
                     <p className="text-[11px] font-bold text-red-700 uppercase mb-2">Peringatan SP3</p>
                     <p className="text-3xl font-bold text-gray-900">{currentStats.sp3}</p>
                   </div>
@@ -1612,9 +1212,7 @@ export default function App() {
                             });
                           })}
                           {dashboardDetailCompanies.length === 0 && (
-                             <tr>
-                                <td colSpan="7" className="text-center py-8 text-gray-400 italic">Tidak ada data perusahaan untuk status ini.</td>
-                             </tr>
+                             <tr><td colSpan="7" className="text-center py-8 text-gray-400 italic">Tidak ada data perusahaan untuk status ini.</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -1650,11 +1248,9 @@ export default function App() {
                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {filteredCompanies.flatMap(company => {
                     const tasks = obligationsData[company.id] || [];
-                    
                     return tasks.map((task, idx) => {
                       const luasSK = Number(task.luas) || 1; 
                       const totals = getTaskTotals(task);
-                      
                       const pctRKP = Math.min(100, (totals.luas_rkp / luasSK) * 100);
                       const pctTanam = Math.min(100, (totals.realisasi_tanam / luasSK) * 100);
                       const pctST = Math.min(100, (totals.luas_serah_terima / luasSK) * 100);
@@ -1685,7 +1281,6 @@ export default function App() {
                                 <div className="bg-blue-600 h-full rounded-full transition-all duration-1000" style={{ width: `${pctRKP}%` }}></div>
                               </div>
                             </div>
-
                             <div>
                               <div className="flex justify-between text-xs font-bold mb-2">
                                 <span className="text-gray-700">Realisasi Tanam <span className="text-gray-500 font-semibold">({totals.realisasi_tanam.toLocaleString('id-ID')} Ha)</span></span>
@@ -1695,7 +1290,6 @@ export default function App() {
                                 <div className="bg-green-600 h-full rounded-full transition-all duration-1000" style={{ width: `${pctTanam}%` }}></div>
                               </div>
                             </div>
-
                             <div>
                               <div className="flex justify-between text-xs font-bold mb-2">
                                 <span className="text-gray-700">Serah Terima <span className="text-gray-500 font-semibold">({totals.luas_serah_terima.toLocaleString('id-ID')} Ha)</span></span>
@@ -1797,11 +1391,7 @@ export default function App() {
                               <td className="px-6 py-4">
                                 <span className="font-mono text-[12px] font-semibold text-gray-700 bg-gray-100 px-2.5 py-1 rounded border border-gray-200 block w-fit mb-1">{taskData.sk_lokasi || '-'}</span>
                                 {taskData.file_sk_name && (
-                                   <button 
-                                     onClick={(e) => handleDownloadFromTable(e, taskData.file_sk_name)}
-                                     className="flex items-center gap-1 mt-1 text-[10px] text-blue-600 font-bold bg-blue-50 hover:bg-blue-100 border border-blue-200 w-fit px-1.5 py-0.5 rounded transition-colors"
-                                     title={`Unduh Dokumen SK dari Cloud: ${taskData.file_sk_name}`}
-                                   >
+                                   <button onClick={(e) => handleDownloadFromTable(e, taskData.file_sk_name)} className="flex items-center gap-1 mt-1 text-[10px] text-blue-600 font-bold bg-blue-50 hover:bg-blue-100 border border-blue-200 w-fit px-1.5 py-0.5 rounded transition-colors" title={`Unduh Dokumen SK dari Cloud: ${taskData.file_sk_name}`}>
                                       <Paperclip className="w-3 h-3" /> File SK
                                    </button>
                                 )}
@@ -1812,11 +1402,7 @@ export default function App() {
                                 <div className="flex flex-col items-end">
                                    <span className={`font-bold ${serahTerimaColor}`}>{totals.luas_serah_terima.toLocaleString('id-ID')}</span>
                                    {taskData.file_bast_name && (
-                                      <button 
-                                        onClick={(e) => handleDownloadFromTable(e, taskData.file_bast_name)}
-                                        className="flex items-center gap-1 mt-1 text-[10px] text-orange-600 font-bold bg-orange-50 hover:bg-orange-100 border border-orange-200 w-fit px-1.5 py-0.5 rounded transition-colors"
-                                        title={`Unduh BAST dari Cloud: ${taskData.file_bast_name}`}
-                                      >
+                                      <button onClick={(e) => handleDownloadFromTable(e, taskData.file_bast_name)} className="flex items-center gap-1 mt-1 text-[10px] text-orange-600 font-bold bg-orange-50 hover:bg-orange-100 border border-orange-200 w-fit px-1.5 py-0.5 rounded transition-colors" title={`Unduh BAST dari Cloud: ${taskData.file_bast_name}`}>
                                          <Paperclip className="w-3 h-3" /> File BAST
                                       </button>
                                    )}
@@ -1837,19 +1423,11 @@ export default function App() {
                     Menampilkan <span className="font-bold text-gray-800">{filteredCompanies.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}</span> hingga <span className="font-bold text-gray-800">{Math.min(currentPage * itemsPerPage, filteredCompanies.length)}</span> dari <span className="font-bold text-gray-800">{filteredCompanies.length}</span> Perusahaan
                   </div>
                   <div className="flex items-center gap-2">
-                    <button 
-                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                       disabled={currentPage === 1}
-                       className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 text-[13px] font-semibold transition-colors"
-                    >
+                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 text-[13px] font-semibold transition-colors">
                       <ChevronLeft className="w-4 h-4" /> Sebelumnya
                     </button>
                     <span className="text-[13px] font-bold px-3 text-gray-700">Hal {currentPage} / {totalPages || 1}</span>
-                    <button 
-                       onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
-                       disabled={currentPage === totalPages || totalPages === 0}
-                       className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 text-[13px] font-semibold transition-colors"
-                    >
+                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 text-[13px] font-semibold transition-colors">
                       Selanjutnya <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -1951,13 +1529,9 @@ export default function App() {
                                         <span className="text-[12px] font-semibold text-gray-700 w-1/3">Scan SK Penetapan</span>
                                         <div className="flex-1 flex items-center gap-2 justify-end">
                                            <span className="text-[11px] text-gray-500 truncate max-w-[120px] xl:max-w-[200px]" title={task.file_sk_name}>{task.file_sk_name || 'Belum ada file'}</span>
-                                           
                                            {task.file_sk_name && (
-                                              <button type="button" onClick={() => handleSimulateDownload(task.file_sk_name)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded border border-transparent hover:border-blue-200 transition-colors" title="Lihat/Unduh Dokumen">
-                                                <Eye className="w-4 h-4" />
-                                              </button>
+                                              <button type="button" onClick={() => handleSimulateDownload(task.file_sk_name)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded border border-transparent hover:border-blue-200 transition-colors" title="Lihat/Unduh Dokumen"><Eye className="w-4 h-4" /></button>
                                            )}
-
                                            <input type="file" accept=".pdf" className="hidden" id={`upload-sk-${index}`} onChange={(e) => handleFileUpload(index, 'file_sk_name', e.target.files[0])} />
                                            <label htmlFor={`upload-sk-${index}`} className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[11px] font-bold cursor-pointer hover:bg-blue-100 flex items-center gap-1 transition-colors"><Upload className="w-3.5 h-3.5"/> {task.file_sk_name ? 'Ubah' : 'Upload'}</label>
                                         </div>
@@ -1967,13 +1541,9 @@ export default function App() {
                                         <span className="text-[12px] font-semibold text-gray-700 w-1/3">Dokumen BAST (Serah Terima)</span>
                                         <div className="flex-1 flex items-center gap-2 justify-end">
                                            <span className="text-[11px] text-gray-500 truncate max-w-[120px] xl:max-w-[200px]" title={task.file_bast_name}>{task.file_bast_name || 'Belum ada file'}</span>
-                                           
                                            {task.file_bast_name && (
-                                              <button type="button" onClick={() => handleSimulateDownload(task.file_bast_name)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded border border-transparent hover:border-blue-200 transition-colors" title="Lihat/Unduh Dokumen">
-                                                <Eye className="w-4 h-4" />
-                                              </button>
+                                              <button type="button" onClick={() => handleSimulateDownload(task.file_bast_name)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded border border-transparent hover:border-blue-200 transition-colors" title="Lihat/Unduh Dokumen"><Eye className="w-4 h-4" /></button>
                                            )}
-
                                            <input type="file" accept=".pdf" className="hidden" id={`upload-bast-${index}`} onChange={(e) => handleFileUpload(index, 'file_bast_name', e.target.files[0])} />
                                            <label htmlFor={`upload-bast-${index}`} className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[11px] font-bold cursor-pointer hover:bg-blue-100 flex items-center gap-1 transition-colors"><Upload className="w-3.5 h-3.5"/> {task.file_bast_name ? 'Ubah' : 'Upload'}</label>
                                         </div>
