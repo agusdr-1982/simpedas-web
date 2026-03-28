@@ -78,8 +78,15 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
-        setAuthView('app'); // Langsung masuk aplikasi jika terdeteksi login
+        // KODE BARU: Blokir sisa-sisa login anonim (bypass) dari memori browser Bapak
+        if (currentUser.isAnonymous) {
+          signOut(auth);
+          setUser(null);
+          if (authView === 'app') setAuthView('landing');
+        } else {
+          setUser(currentUser);
+          setAuthView('app'); // Langsung masuk aplikasi jika terdeteksi login resmi
+        }
       } else {
         setUser(null);
         // Jika tidak ada user, pastikan berada di layar pendaftaran/login
@@ -472,7 +479,9 @@ export default function App() {
         <div className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-[20s] hover:scale-105" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1448375240586-882707db888b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80')` }}></div>
         <div className="absolute inset-0 bg-green-950/70 bg-gradient-to-b from-green-900/80 to-green-950/90"></div>
         <div className="relative z-10 text-center px-6 max-w-5xl flex flex-col items-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
-          <div className="w-24 h-24 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mb-8 border border-white/20 shadow-[0_0_40px_rgba(74,222,128,0.3)]"><Sprout className="w-12 h-12 text-green-400" /></div>
+          <div className="w-24 h-24 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(74,222,128,0.3)] overflow-hidden p-2">
+            <img src="/logo-kemenhut.png" alt="Logo Kementerian Kehutanan" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg/200px-Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg.png'; }} />
+          </div>
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-lg">Sistem Monitoring dan Pengawasan Pemenuhan Kewajiban <br className="hidden lg:block"/><span className="text-green-400">Pemegang PPKH dan PKTMKH</span></h1>
           <p className="text-lg md:text-xl text-green-100 mb-12 tracking-wide font-medium max-w-3xl">Di Wilayah Kerja BPDAS Kahayan</p>
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
@@ -495,7 +504,10 @@ export default function App() {
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
           <div className="bg-green-800 p-6 text-center relative">
             <button onClick={() => setAuthView('landing')} className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-green-200 hover:text-white hover:bg-green-700 rounded-full transition-colors"><ArrowLeft className="w-5 h-5" /></button>
-            <Sprout className="w-10 h-10 text-green-400 mx-auto mb-2" /><h2 className="text-xl font-bold text-white uppercase tracking-wider">{authView === 'login' ? 'Login Portal' : 'Registrasi Akun'}</h2>
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 p-1.5 shadow-md">
+               <img src="/logo-kemenhut.png" alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg/200px-Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg.png'; }} />
+            </div>
+            <h2 className="text-xl font-bold text-white uppercase tracking-wider">{authView === 'login' ? 'Login Portal' : 'Registrasi Akun'}</h2>
           </div>
           <div className="p-8">
             {/* Peringatan Error Login */}
@@ -551,7 +563,9 @@ export default function App() {
       {/* SIDEBAR */}
       <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-green-900 flex flex-col shadow-xl shrink-0 z-20 text-white relative transition-all duration-300 ease-in-out`}>
         <div className="flex flex-col items-center justify-center pt-8 pb-6 border-b border-green-800 shrink-0 group cursor-default h-[140px]">
-          <Sprout className={`${isSidebarOpen ? 'w-16 h-16 mb-4' : 'w-8 h-8'} text-green-400 drop-shadow-md transition-all duration-300`} />
+          <div className={`${isSidebarOpen ? 'w-16 h-16 mb-3' : 'w-10 h-10'} bg-white rounded-full p-1 shadow-md transition-all duration-300`}>
+             <img src="/logo-kemenhut.png" alt="Logo BPDAS" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg/200px-Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg.png'; }} />
+          </div>
           {isSidebarOpen && (<h1 className="font-bold text-[16px] text-white tracking-[0.1em] text-center whitespace-nowrap overflow-hidden opacity-100 transition-opacity duration-300" style={{ textShadow: "1px 1px 3px rgba(0,0,0,0.5)" }}>BPDAS KAHAYAN</h1>)}
         </div>
         
@@ -665,10 +679,13 @@ export default function App() {
                  {(user?.email || 'A').substring(0,1).toUpperCase()}
                </div>
                
-               <div className="absolute right-0 top-12 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 hidden group-hover:block z-50">
-                  <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-[13px] font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2">
-                    <ArrowLeft className="w-4 h-4"/> Keluar / Logout
-                  </button>
+               {/* PERBAIKAN: Menambahkan jembatan padding (pt-2) agar menu tidak hilang saat di-hover */}
+               <div className="absolute right-0 top-full pt-2 w-48 hidden group-hover:block z-50">
+                  <div className="bg-white rounded-md shadow-xl border border-gray-200 py-1">
+                    <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-[13px] font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2">
+                      <ArrowLeft className="w-4 h-4"/> Keluar / Logout
+                    </button>
+                  </div>
                </div>
              </div>
           </div>
