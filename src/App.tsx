@@ -293,6 +293,14 @@ export default function App() {
     setEditFormData((prev) => ({ ...prev, tasks: [ ...prev.tasks, { id: Date.now(), task: 'Rehabilitasi DAS', sk_lokasi: '', lokasi: '', luas: '', status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [], riwayat_tanam: [], riwayat_serah_terima: [] } ] }));
   };
 
+  const removeTaskBlock = (taskIndex) => {
+    setEditFormData((prev) => {
+      const newTasks = [...prev.tasks];
+      newTasks.splice(taskIndex, 1);
+      return { ...prev, tasks: newTasks };
+    });
+  };
+
   const addHistory = (taskIndex, type) => {
     setEditFormData((prev) => {
       const newTasks = [...prev.tasks]; const newHistory = [...(newTasks[taskIndex][type] || [])];
@@ -754,6 +762,88 @@ export default function App() {
                 </div>
               </div>
 
+              {/* TREN TAHUNAN & STATUS UMUR TANAMAN */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                 <div className="bg-white rounded-3xl border border-gray-100 shadow-xl p-8">
+                    <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-3"><TrendingUp className="w-6 h-6 text-purple-600"/> Tren Kinerja Tahunan</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                       <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">PENYUSUNAN RKP</p>
+                          <div className="h-48 flex items-end gap-2">
+                             {yearlyProgress.yearsList.map(y => {
+                                const val = yearlyProgress.data.rkp[y] || 0;
+                                const pct = yearlyProgress.maxRKP > 0 ? (val / yearlyProgress.maxRKP) * 100 : 0;
+                                return (
+                                   <div key={`rkp-${y}`} className="flex-1 flex flex-col items-center justify-end group">
+                                      <span className="text-[9px] font-black text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
+                                      <div className="w-full bg-blue-100 rounded-t-sm flex items-end justify-center" style={{height: '100%'}}>
+                                         <div className="w-full bg-blue-500 rounded-t-sm transition-all duration-1000" style={{height: `${pct}%`}}></div>
+                                      </div>
+                                      <span className="text-[9px] font-bold text-gray-400 mt-2">{y}</span>
+                                   </div>
+                                )
+                             })}
+                          </div>
+                       </div>
+                       <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">REALISASI TANAM</p>
+                          <div className="h-48 flex items-end gap-2">
+                             {yearlyProgress.yearsList.map(y => {
+                                const val = yearlyProgress.data.tanam[y] || 0;
+                                const pct = yearlyProgress.maxTanam > 0 ? (val / yearlyProgress.maxTanam) * 100 : 0;
+                                return (
+                                   <div key={`tnm-${y}`} className="flex-1 flex flex-col items-center justify-end group">
+                                      <span className="text-[9px] font-black text-green-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
+                                      <div className="w-full bg-green-100 rounded-t-sm flex items-end justify-center" style={{height: '100%'}}>
+                                         <div className="w-full bg-green-500 rounded-t-sm transition-all duration-1000" style={{height: `${pct}%`}}></div>
+                                      </div>
+                                      <span className="text-[9px] font-bold text-gray-400 mt-2">{y}</span>
+                                   </div>
+                                )
+                             })}
+                          </div>
+                       </div>
+                       <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">SERAH TERIMA</p>
+                          <div className="h-48 flex items-end gap-2">
+                             {yearlyProgress.yearsList.map(y => {
+                                const val = yearlyProgress.data.st[y] || 0;
+                                const pct = yearlyProgress.maxST > 0 ? (val / yearlyProgress.maxST) * 100 : 0;
+                                return (
+                                   <div key={`st-${y}`} className="flex-1 flex flex-col items-center justify-end group">
+                                      <span className="text-[9px] font-black text-orange-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
+                                      <div className="w-full bg-orange-100 rounded-t-sm flex items-end justify-center" style={{height: '100%'}}>
+                                         <div className="w-full bg-orange-400 rounded-t-sm transition-all duration-1000" style={{height: `${pct}%`}}></div>
+                                      </div>
+                                      <span className="text-[9px] font-bold text-gray-400 mt-2">{y}</span>
+                                   </div>
+                                )
+                             })}
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="bg-white rounded-3xl border border-gray-100 shadow-xl p-8">
+                    <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-3"><Layers className="w-6 h-6 text-teal-600"/> Komposisi Umur Tanaman</h3>
+                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-8">
+                       <div className="flex justify-between text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">
+                          <span>Total Realisasi: {plantStatusStats.total.toLocaleString('id-ID')} Ha</span><span>100%</span>
+                       </div>
+                       <div className="w-full h-8 flex rounded-full overflow-hidden shadow-inner bg-gray-200">
+                          {plantStatusStats.pctP0 > 0 && <div className="h-full bg-sky-500 flex items-center justify-center text-[10px] font-black text-white" style={{width: `${plantStatusStats.pctP0}%`}}>{plantStatusStats.pctP0 > 5 ? `${plantStatusStats.pctP0.toFixed(0)}%` : ''}</div>}
+                          {plantStatusStats.pctP1 > 0 && <div className="h-full bg-teal-500 flex items-center justify-center text-[10px] font-black text-white" style={{width: `${plantStatusStats.pctP1}%`}}>{plantStatusStats.pctP1 > 5 ? `${plantStatusStats.pctP1.toFixed(0)}%` : ''}</div>}
+                          {plantStatusStats.pctP2 > 0 && <div className="h-full bg-emerald-700 flex items-center justify-center text-[10px] font-black text-white" style={{width: `${plantStatusStats.pctP2}%`}}>{plantStatusStats.pctP2 > 5 ? `${plantStatusStats.pctP2.toFixed(0)}%` : ''}</div>}
+                       </div>
+                       <div className="flex justify-between mt-6">
+                          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-sky-500 shadow-sm"></div><span className="text-xs font-bold text-gray-600">P0 ({plantStatusStats.p0} Ha)</span></div>
+                          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-teal-500 shadow-sm"></div><span className="text-xs font-bold text-gray-600">P1 ({plantStatusStats.p1} Ha)</span></div>
+                          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-emerald-700 shadow-sm"></div><span className="text-xs font-bold text-gray-600">P2 ({plantStatusStats.p2} Ha)</span></div>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
               <div>
                 <h3 className="font-bold text-gray-900 mb-5 flex items-center gap-2 px-1"><ShieldAlert className="w-5 h-5 text-rose-600" /> Peringatan Smart EWS ({smartAlerts.length})</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -852,10 +942,22 @@ export default function App() {
                     <section>
                       <h4 className="text-[13px] font-bold text-gray-500 uppercase tracking-wide mb-4 border-b border-gray-200 pb-2">Rincian Kewajiban Penanaman</h4>
                       {editFormData.tasks.map((task, index) => (
-                        <div key={task.id} className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                             <div className="md:col-span-2"><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">No. SK Penetapan</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-md" value={task.sk_lokasi} onChange={(e) => handleTaskChange(index, 'sk_lokasi', e.target.value)} /></div>
-                             <div><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">Luas SK (Ha)</label><input type="number" step="any" className="w-full px-4 py-2 border border-gray-300 rounded-md" value={task.luas || ''} onChange={(e) => handleTaskChange(index, 'luas', e.target.value)} /></div>
+                        <div key={task.id} className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6 relative">
+                          {editFormData.tasks.length > 1 && (
+                            <button onClick={() => removeTaskBlock(index)} className="absolute top-4 right-4 text-red-400 hover:text-red-600 bg-white rounded-full p-1 shadow-sm border border-gray-200" title="Hapus Kewajiban Ini"><X className="w-4 h-4" /></button>
+                          )}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 pr-8">
+                             <div className="lg:col-span-1">
+                               <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">Jenis Kewajiban</label>
+                               <select className="w-full px-4 py-2 border border-gray-300 rounded-md text-[13px] font-semibold" value={task.task} onChange={(e) => handleTaskChange(index, 'task', e.target.value)}>
+                                 <option value="Rehabilitasi DAS">Rehabilitasi DAS</option>
+                                 <option value="Reklamasi Hutan">Reklamasi Hutan</option>
+                                 <option value="Reboisasi Areal Pengganti">Reboisasi Pengganti</option>
+                               </select>
+                             </div>
+                             <div className="lg:col-span-1"><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">No. SK Penetapan</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-md text-[13px]" value={task.sk_lokasi} onChange={(e) => handleTaskChange(index, 'sk_lokasi', e.target.value)} placeholder="Nomor SK" /></div>
+                             <div className="lg:col-span-1"><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">Lokasi Penanaman</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-md text-[13px]" value={task.lokasi || ''} onChange={(e) => handleTaskChange(index, 'lokasi', e.target.value)} placeholder="Contoh: HL Sungai X" /></div>
+                             <div className="lg:col-span-1"><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">Luas SK (Ha)</label><input type="number" step="any" className="w-full px-4 py-2 border border-gray-300 rounded-md text-[13px]" value={task.luas || ''} onChange={(e) => handleTaskChange(index, 'luas', e.target.value)} placeholder="0.00" /></div>
                           </div>
                           
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -873,9 +975,14 @@ export default function App() {
                              <div className="bg-white p-5 rounded-lg border border-gray-200">
                                <label className="text-[12px] font-bold text-gray-800 uppercase mb-4 block">Realisasi Tanam</label>
                                {(task.riwayat_tanam || []).map((r, hi) => (
-                                 <div key={hi} className="flex gap-2 mb-2">
-                                    <input type="number" className="w-20 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'tahun', e.target.value)} />
-                                    <input type="number" className="flex-1 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'luas', e.target.value)} />
+                                 <div key={hi} className="flex gap-2 mb-2 items-center">
+                                    <input type="number" placeholder="Thn" className="w-16 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'tahun', e.target.value)} />
+                                    <input type="number" placeholder="Luas" className="w-16 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'luas', e.target.value)} />
+                                    <select className="flex-1 px-1 py-1 border border-gray-300 rounded text-[11px] font-semibold" value={r.status || 'P0'} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'status', e.target.value)}>
+                                       <option value="P0">P0 (Baru)</option>
+                                       <option value="P1">P1</option>
+                                       <option value="P2">P2</option>
+                                    </select>
                                     <button onClick={() => removeHistory(index, 'riwayat_tanam', hi)} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5"/></button>
                                  </div>
                                ))}
