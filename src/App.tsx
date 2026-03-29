@@ -479,9 +479,11 @@ export default function App() {
         <div className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-[20s] hover:scale-105" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1448375240586-882707db888b?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80')` }}></div>
         <div className="absolute inset-0 bg-green-950/70 bg-gradient-to-b from-green-900/80 to-green-950/90"></div>
         <div className="relative z-10 text-center px-6 max-w-5xl flex flex-col items-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
-          <div className="w-24 h-24 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(74,222,128,0.3)] overflow-hidden p-2">
-            <img src="/logo-kemenhut.png" alt="Logo Kementerian Kehutanan" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg/200px-Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg.png'; }} />
+          
+          <div className="w-28 h-28 md:w-36 md:h-36 flex items-center justify-center mb-8 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">
+            <LogoBPDAS className="w-full h-full" />
           </div>
+
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-lg">Sistem Monitoring dan Pengawasan Pemenuhan Kewajiban <br className="hidden lg:block"/><span className="text-green-400">Pemegang PPKH dan PKTMKH</span></h1>
           <p className="text-lg md:text-xl text-green-100 mb-12 tracking-wide font-medium max-w-3xl">Di Wilayah Kerja BPDAS Kahayan</p>
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
@@ -504,9 +506,11 @@ export default function App() {
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
           <div className="bg-green-800 p-6 text-center relative">
             <button onClick={() => setAuthView('landing')} className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-green-200 hover:text-white hover:bg-green-700 rounded-full transition-colors"><ArrowLeft className="w-5 h-5" /></button>
-            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 p-1.5 shadow-md">
-               <img src="/logo-kemenhut.png" alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg/200px-Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg.png'; }} />
+            
+            <div className="w-20 h-20 flex items-center justify-center mx-auto mb-3 drop-shadow-md">
+               <LogoBPDAS className="w-full h-full" />
             </div>
+
             <h2 className="text-xl font-bold text-white uppercase tracking-wider">{authView === 'login' ? 'Login Portal' : 'Registrasi Akun'}</h2>
           </div>
           <div className="p-8">
@@ -563,9 +567,11 @@ export default function App() {
       {/* SIDEBAR */}
       <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-green-900 flex flex-col shadow-xl shrink-0 z-20 text-white relative transition-all duration-300 ease-in-out`}>
         <div className="flex flex-col items-center justify-center pt-8 pb-6 border-b border-green-800 shrink-0 group cursor-default h-[140px]">
-          <div className={`${isSidebarOpen ? 'w-16 h-16 mb-3' : 'w-10 h-10'} bg-white rounded-full p-1 shadow-md transition-all duration-300`}>
-             <img src="/logo-kemenhut.png" alt="Logo BPDAS" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg/200px-Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg.png'; }} />
+          
+          <div className={`${isSidebarOpen ? 'w-20 h-20 mb-3' : 'w-10 h-10'} flex items-center justify-center drop-shadow-md transition-all duration-300`}>
+             <LogoBPDAS className="w-full h-full" />
           </div>
+
           {isSidebarOpen && (<h1 className="font-bold text-[16px] text-white tracking-[0.1em] text-center whitespace-nowrap overflow-hidden opacity-100 transition-opacity duration-300" style={{ textShadow: "1px 1px 3px rgba(0,0,0,0.5)" }}>BPDAS KAHAYAN</h1>)}
         </div>
         
