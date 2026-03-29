@@ -481,7 +481,7 @@ export default function App() {
         <div className="relative z-10 text-center px-6 max-w-5xl flex flex-col items-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
           
           <div className="w-28 h-28 md:w-36 md:h-36 flex items-center justify-center mb-8 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">
-            <LogoBPDAS className="w-full h-full" />
+            <img src="/logo-kemenhut.png" alt="Logo BPDAS" className="w-full h-full object-contain" />
           </div>
 
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-lg">Sistem Monitoring dan Pengawasan Pemenuhan Kewajiban <br className="hidden lg:block"/><span className="text-green-400">Pemegang PPKH dan PKTMKH</span></h1>
@@ -508,7 +508,7 @@ export default function App() {
             <button onClick={() => setAuthView('landing')} className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-green-200 hover:text-white hover:bg-green-700 rounded-full transition-colors"><ArrowLeft className="w-5 h-5" /></button>
             
             <div className="w-20 h-20 flex items-center justify-center mx-auto mb-3 drop-shadow-md">
-               <LogoBPDAS className="w-full h-full" />
+               <img src="/logo-kemenhut.png" alt="Logo BPDAS" className="w-full h-full object-contain" />
             </div>
 
             <h2 className="text-xl font-bold text-white uppercase tracking-wider">{authView === 'login' ? 'Login Portal' : 'Registrasi Akun'}</h2>
@@ -569,7 +569,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center pt-8 pb-6 border-b border-green-800 shrink-0 group cursor-default h-[140px]">
           
           <div className={`${isSidebarOpen ? 'w-20 h-20 mb-3' : 'w-10 h-10'} flex items-center justify-center drop-shadow-md transition-all duration-300`}>
-             <LogoBPDAS className="w-full h-full" />
+             <img src="/logo-kemenhut.png" alt="Logo BPDAS" className="w-full h-full object-contain" />
           </div>
 
           {isSidebarOpen && (<h1 className="font-bold text-[16px] text-white tracking-[0.1em] text-center whitespace-nowrap overflow-hidden opacity-100 transition-opacity duration-300" style={{ textShadow: "1px 1px 3px rgba(0,0,0,0.5)" }}>BPDAS KAHAYAN</h1>)}
