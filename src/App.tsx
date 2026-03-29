@@ -386,7 +386,29 @@ export default function App() {
     return { totalDAS, totalReklamasi, totalReboisasi, countDAS, countReklamasi, countReboisasi };
   }, [dashboardCategory, companiesData, obligationsData]);
 
-  const currentStats = getStats(dashboardCategory);
+  // Digunakan untuk Card SP1, SP2, SP3 di Dashboard
+  const currentStats = useMemo(() => {
+    let tertib = 0, sp1 = 0, sp2 = 0, sp3 = 0;
+    companiesData.forEach((c) => {
+      if (dashboardCategory === 'Semua' || c.category === dashboardCategory) {
+        const tasks = obligationsData[c.id] || [];
+        // Jika tidak punya tasks, gunakan status perusahaan. Jika punya, ambil status terburuk dari tasks-nya.
+        let status = c.status || 'Tertib';
+        if (tasks.length > 0) {
+          const statuses = tasks.map(t => t.status || 'Tertib');
+          if (statuses.includes('SP3')) status = 'SP3';
+          else if (statuses.includes('SP2')) status = 'SP2';
+          else if (statuses.includes('SP1')) status = 'SP1';
+          else status = 'Tertib';
+        }
+        if (status === 'Tertib') tertib++;
+        else if (status === 'SP1') sp1++;
+        else if (status === 'SP2') sp2++;
+        else if (status === 'SP3') sp3++;
+      }
+    });
+    return { tertib, sp1, sp2, sp3 };
+  }, [dashboardCategory, companiesData, obligationsData]);
 
   const filteredCompanies = companiesData.filter((company) => {
     const matchesSearch = company.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -729,6 +751,26 @@ export default function App() {
                 </div>
               </div>
 
+              {/* KARTU SANKSI ADMINISTRATIF */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                 <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm border-t-4 border-t-green-500">
+                    <p className="text-[10px] font-black text-gray-400 uppercase mb-2">Status Tertib</p>
+                    <p className="text-2xl font-black text-green-700">{currentStats.tertib}</p>
+                 </div>
+                 <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm border-t-4 border-t-yellow-500">
+                    <p className="text-[10px] font-black text-gray-400 uppercase mb-2">Status SP1</p>
+                    <p className="text-2xl font-black text-yellow-600">{currentStats.sp1}</p>
+                 </div>
+                 <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm border-t-4 border-t-orange-500">
+                    <p className="text-[10px] font-black text-gray-400 uppercase mb-2">Status SP2</p>
+                    <p className="text-2xl font-black text-orange-600">{currentStats.sp2}</p>
+                 </div>
+                 <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm border-t-4 border-t-red-600">
+                    <p className="text-[10px] font-black text-gray-400 uppercase mb-2">Status SP3</p>
+                    <p className="text-2xl font-black text-red-600">{currentStats.sp3}</p>
+                 </div>
+              </div>
+
               <div className="bg-white rounded-lg border border-gray-200 shadow p-6">
                 <h3 className="font-bold text-gray-900 mb-6 flex items-center gap-2"><PieChart className="w-5 h-5 text-blue-600" /> Rekapitulasi progres pemenuhan kewajiban pemegang PPKH dan PKTMKH</h3>
                 <div className="space-y-6">
@@ -763,59 +805,59 @@ export default function App() {
               </div>
 
               {/* TREN TAHUNAN & STATUS UMUR TANAMAN */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                 <div className="bg-white rounded-3xl border border-gray-100 shadow-xl p-8">
-                    <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-3"><TrendingUp className="w-6 h-6 text-purple-600"/> Tren Kinerja Tahunan</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                       <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
-                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">PENYUSUNAN RKP</p>
-                          <div className="h-48 flex items-end gap-2">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                 <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                    <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-purple-600"/> Tren Kinerja Tahunan</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">RKP</p>
+                          <div className="h-40 flex items-end gap-1">
                              {yearlyProgress.yearsList.map(y => {
                                 const val = yearlyProgress.data.rkp[y] || 0;
                                 const pct = yearlyProgress.maxRKP > 0 ? (val / yearlyProgress.maxRKP) * 100 : 0;
                                 return (
                                    <div key={`rkp-${y}`} className="flex-1 flex flex-col items-center justify-end group">
-                                      <span className="text-[9px] font-black text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
+                                      <span className="text-[8px] font-black text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
                                       <div className="w-full bg-blue-100 rounded-t-sm flex items-end justify-center" style={{height: '100%'}}>
                                          <div className="w-full bg-blue-500 rounded-t-sm transition-all duration-1000" style={{height: `${pct}%`}}></div>
                                       </div>
-                                      <span className="text-[9px] font-bold text-gray-400 mt-2">{y}</span>
+                                      <span className="text-[8px] font-bold text-gray-400 mt-1">{y}</span>
                                    </div>
                                 )
                              })}
                           </div>
                        </div>
-                       <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
-                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">REALISASI TANAM</p>
-                          <div className="h-48 flex items-end gap-2">
+                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">TANAM</p>
+                          <div className="h-40 flex items-end gap-1">
                              {yearlyProgress.yearsList.map(y => {
                                 const val = yearlyProgress.data.tanam[y] || 0;
                                 const pct = yearlyProgress.maxTanam > 0 ? (val / yearlyProgress.maxTanam) * 100 : 0;
                                 return (
                                    <div key={`tnm-${y}`} className="flex-1 flex flex-col items-center justify-end group">
-                                      <span className="text-[9px] font-black text-green-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
+                                      <span className="text-[8px] font-black text-green-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
                                       <div className="w-full bg-green-100 rounded-t-sm flex items-end justify-center" style={{height: '100%'}}>
                                          <div className="w-full bg-green-500 rounded-t-sm transition-all duration-1000" style={{height: `${pct}%`}}></div>
                                       </div>
-                                      <span className="text-[9px] font-bold text-gray-400 mt-2">{y}</span>
+                                      <span className="text-[8px] font-bold text-gray-400 mt-1">{y}</span>
                                    </div>
                                 )
                              })}
                           </div>
                        </div>
-                       <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
-                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">SERAH TERIMA</p>
-                          <div className="h-48 flex items-end gap-2">
+                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">BAST</p>
+                          <div className="h-40 flex items-end gap-1">
                              {yearlyProgress.yearsList.map(y => {
                                 const val = yearlyProgress.data.st[y] || 0;
                                 const pct = yearlyProgress.maxST > 0 ? (val / yearlyProgress.maxST) * 100 : 0;
                                 return (
                                    <div key={`st-${y}`} className="flex-1 flex flex-col items-center justify-end group">
-                                      <span className="text-[9px] font-black text-orange-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
+                                      <span className="text-[8px] font-black text-orange-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
                                       <div className="w-full bg-orange-100 rounded-t-sm flex items-end justify-center" style={{height: '100%'}}>
                                          <div className="w-full bg-orange-400 rounded-t-sm transition-all duration-1000" style={{height: `${pct}%`}}></div>
                                       </div>
-                                      <span className="text-[9px] font-bold text-gray-400 mt-2">{y}</span>
+                                      <span className="text-[8px] font-bold text-gray-400 mt-1">{y}</span>
                                    </div>
                                 )
                              })}
@@ -824,21 +866,21 @@ export default function App() {
                     </div>
                  </div>
 
-                 <div className="bg-white rounded-3xl border border-gray-100 shadow-xl p-8">
-                    <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-3"><Layers className="w-6 h-6 text-teal-600"/> Komposisi Umur Tanaman</h3>
-                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-8">
+                 <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                    <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-2"><Layers className="w-5 h-5 text-teal-600"/> Komposisi Umur Tanaman</h3>
+                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-100 mb-6">
                        <div className="flex justify-between text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">
                           <span>Total Realisasi: {plantStatusStats.total.toLocaleString('id-ID')} Ha</span><span>100%</span>
                        </div>
-                       <div className="w-full h-8 flex rounded-full overflow-hidden shadow-inner bg-gray-200">
+                       <div className="w-full h-6 flex rounded-full overflow-hidden shadow-inner bg-gray-200">
                           {plantStatusStats.pctP0 > 0 && <div className="h-full bg-sky-500 flex items-center justify-center text-[10px] font-black text-white" style={{width: `${plantStatusStats.pctP0}%`}}>{plantStatusStats.pctP0 > 5 ? `${plantStatusStats.pctP0.toFixed(0)}%` : ''}</div>}
                           {plantStatusStats.pctP1 > 0 && <div className="h-full bg-teal-500 flex items-center justify-center text-[10px] font-black text-white" style={{width: `${plantStatusStats.pctP1}%`}}>{plantStatusStats.pctP1 > 5 ? `${plantStatusStats.pctP1.toFixed(0)}%` : ''}</div>}
                           {plantStatusStats.pctP2 > 0 && <div className="h-full bg-emerald-700 flex items-center justify-center text-[10px] font-black text-white" style={{width: `${plantStatusStats.pctP2}%`}}>{plantStatusStats.pctP2 > 5 ? `${plantStatusStats.pctP2.toFixed(0)}%` : ''}</div>}
                        </div>
-                       <div className="flex justify-between mt-6">
-                          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-sky-500 shadow-sm"></div><span className="text-xs font-bold text-gray-600">P0 ({plantStatusStats.p0} Ha)</span></div>
-                          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-teal-500 shadow-sm"></div><span className="text-xs font-bold text-gray-600">P1 ({plantStatusStats.p1} Ha)</span></div>
-                          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-emerald-700 shadow-sm"></div><span className="text-xs font-bold text-gray-600">P2 ({plantStatusStats.p2} Ha)</span></div>
+                       <div className="flex justify-between mt-5">
+                          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-sky-500 shadow-sm"></div><span className="text-xs font-bold text-gray-600">P0 ({plantStatusStats.p0} Ha)</span></div>
+                          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-teal-500 shadow-sm"></div><span className="text-xs font-bold text-gray-600">P1 ({plantStatusStats.p1} Ha)</span></div>
+                          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-emerald-700 shadow-sm"></div><span className="text-xs font-bold text-gray-600">P2 ({plantStatusStats.p2} Ha)</span></div>
                        </div>
                     </div>
                  </div>
@@ -944,9 +986,9 @@ export default function App() {
                       {editFormData.tasks.map((task, index) => (
                         <div key={task.id} className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6 relative">
                           {editFormData.tasks.length > 1 && (
-                            <button onClick={() => removeTaskBlock(index)} className="absolute top-4 right-4 text-red-400 hover:text-red-600 bg-white rounded-full p-1 shadow-sm border border-gray-200" title="Hapus Kewajiban Ini"><X className="w-4 h-4" /></button>
+                            <button onClick={() => removeTaskBlock(index)} className="absolute -top-3 -right-3 bg-red-100 text-red-500 hover:text-white hover:bg-red-600 rounded-full p-1.5 shadow-sm border border-red-200 transition-colors" title="Hapus Kewajiban Ini"><X className="w-4 h-4" /></button>
                           )}
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 pr-8">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                              <div className="lg:col-span-1">
                                <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">Jenis Kewajiban</label>
                                <select className="w-full px-4 py-2 border border-gray-300 rounded-md text-[13px] font-semibold" value={task.task} onChange={(e) => handleTaskChange(index, 'task', e.target.value)}>
@@ -956,8 +998,17 @@ export default function App() {
                                </select>
                              </div>
                              <div className="lg:col-span-1"><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">No. SK Penetapan</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-md text-[13px]" value={task.sk_lokasi} onChange={(e) => handleTaskChange(index, 'sk_lokasi', e.target.value)} placeholder="Nomor SK" /></div>
-                             <div className="lg:col-span-1"><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">Lokasi Penanaman</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-md text-[13px]" value={task.lokasi || ''} onChange={(e) => handleTaskChange(index, 'lokasi', e.target.value)} placeholder="Contoh: HL Sungai X" /></div>
+                             <div className="lg:col-span-1"><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">Lokasi</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-md text-[13px]" value={task.lokasi || ''} onChange={(e) => handleTaskChange(index, 'lokasi', e.target.value)} placeholder="Nama Lokasi" /></div>
                              <div className="lg:col-span-1"><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">Luas SK (Ha)</label><input type="number" step="any" className="w-full px-4 py-2 border border-gray-300 rounded-md text-[13px]" value={task.luas || ''} onChange={(e) => handleTaskChange(index, 'luas', e.target.value)} placeholder="0.00" /></div>
+                             <div className="lg:col-span-1">
+                               <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">Sanksi Admin</label>
+                               <select className="w-full px-4 py-2 border border-gray-300 rounded-md text-[13px] font-bold text-red-600" value={task.status || 'Tertib'} onChange={(e) => handleTaskChange(index, 'status', e.target.value)}>
+                                 <option value="Tertib" className="text-green-700">Tertib (Aman)</option>
+                                 <option value="SP1" className="text-yellow-700">SP1</option>
+                                 <option value="SP2" className="text-orange-700">SP2</option>
+                                 <option value="SP3" className="text-red-700">SP3</option>
+                               </select>
+                             </div>
                           </div>
                           
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -965,8 +1016,8 @@ export default function App() {
                                <label className="text-[12px] font-bold text-gray-800 uppercase mb-4 block">Riwayat RKP</label>
                                {(task.riwayat_rkp || []).map((r, hi) => (
                                  <div key={hi} className="flex gap-2 mb-2">
-                                    <input type="number" className="w-20 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_rkp', hi, 'tahun', e.target.value)} />
-                                    <input type="number" className="flex-1 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_rkp', hi, 'luas', e.target.value)} />
+                                    <input type="number" className="w-20 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_rkp', hi, 'tahun', e.target.value)} placeholder="Thn" />
+                                    <input type="number" className="flex-1 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_rkp', hi, 'luas', e.target.value)} placeholder="Luas" />
                                     <button onClick={() => removeHistory(index, 'riwayat_rkp', hi)} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5"/></button>
                                  </div>
                                ))}
@@ -979,7 +1030,7 @@ export default function App() {
                                     <input type="number" placeholder="Thn" className="w-16 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'tahun', e.target.value)} />
                                     <input type="number" placeholder="Luas" className="w-16 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'luas', e.target.value)} />
                                     <select className="flex-1 px-1 py-1 border border-gray-300 rounded text-[11px] font-semibold" value={r.status || 'P0'} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'status', e.target.value)}>
-                                       <option value="P0">P0 (Baru)</option>
+                                       <option value="P0">P0</option>
                                        <option value="P1">P1</option>
                                        <option value="P2">P2</option>
                                     </select>
@@ -992,8 +1043,8 @@ export default function App() {
                                <label className="text-[12px] font-bold text-gray-800 uppercase mb-4 block">Serah Terima BAST</label>
                                {(task.riwayat_serah_terima || []).map((r, hi) => (
                                  <div key={hi} className="flex gap-2 mb-2">
-                                    <input type="number" className="w-20 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_serah_terima', hi, 'tahun', e.target.value)} />
-                                    <input type="number" className="flex-1 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_serah_terima', hi, 'luas', e.target.value)} />
+                                    <input type="number" className="w-20 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_serah_terima', hi, 'tahun', e.target.value)} placeholder="Thn" />
+                                    <input type="number" className="flex-1 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_serah_terima', hi, 'luas', e.target.value)} placeholder="Luas" />
                                     <button onClick={() => removeHistory(index, 'riwayat_serah_terima', hi)} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5"/></button>
                                  </div>
                                ))}
@@ -1048,7 +1099,7 @@ export default function App() {
                           <div className="flex justify-between items-start mb-6 border-b border-gray-100 pb-4">
                             <div>
                               <p className="font-bold text-gray-900 text-lg mb-1">{company.name}</p>
-                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{task.task}</p>
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{task.task} {task.lokasi ? `• ${task.lokasi}` : ''}</p>
                             </div>
                             <div className="text-right">
                                <span className={`px-2.5 py-1 rounded border text-[11px] font-bold uppercase mb-2 inline-block ${getStatusColor(task.status || company.status)}`}>{task.status || company.status}</span>
