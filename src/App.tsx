@@ -487,6 +487,100 @@ export default function App() {
     return alerts;
   }, [companiesData, obligationsData]);
 
+  const dashboardDetailCompanies = useMemo(() => {
+    if (!selectedDashboardStatus) return [];
+    return companiesData.filter((c) => {
+      const matchesCat = dashboardCategory === 'Semua' || c.category === dashboardCategory;
+      const matchesStat = selectedDashboardStatus === 'Semua' ? true : c.status === selectedDashboardStatus;
+      return matchesCat && matchesStat;
+    });
+  }, [companiesData, dashboardCategory, selectedDashboardStatus]);
+
+  const dashboardPlantStatusCompanies = useMemo(() => {
+    if (!selectedPlantStatus) return [];
+    return companiesData.filter((c) => {
+      const matchesCat = dashboardCategory === 'Semua' || c.category === dashboardCategory;
+      if (!matchesCat) return false;
+      
+      const tasks = obligationsData[c.id] || [];
+      return tasks.some(task => {
+        if (!task.riwayat_tanam) return false;
+        return task.riwayat_tanam.some(r => {
+          const status = r.status || 'P0';
+          return status === selectedPlantStatus && Number(r.luas) > 0;
+        });
+      });
+    });
+  }, [companiesData, dashboardCategory, obligationsData, selectedPlantStatus]);
+
+  const exportDashboardCSV = () => {
+    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam (Ha)", "Realisasi P0 (Ha)", "Realisasi P1 (Ha)", "Realisasi P2 (Ha)", "Serah Terima (Ha)", "Status"];
+    let csvContent = headers.join(",") + "\n";
+    dashboardDetailCompanies.forEach(c => {
+      const tasks = obligationsData[c.id] || [];
+      if (tasks.length === 0) {
+          csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","-","-","0","0","0","0","0","0","${c.status}"\n`;
+      } else {
+          tasks.forEach(task => {
+              const totals = getTaskTotals(task);
+              const luasSK = Number(task.luas) || 0;
+
+              let p0 = 0, p1 = 0, p2 = 0;
+              if (task.riwayat_tanam) {
+                task.riwayat_tanam.forEach(r => {
+                  const l = Number(r.luas) || 0;
+                  if (r.status === 'P0') p0 += l;
+                  else if (r.status === 'P1') p1 += l;
+                  else if (r.status === 'P2') p2 += l;
+                  else p0 += l; 
+                });
+              }
+
+              csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${p0}","${p1}","${p2}","${totals.luas_serah_terima}","${task.status || c.status}"\n`;
+          });
+      }
+    });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    const safeStatus = selectedDashboardStatus ? selectedDashboardStatus.replace(/\s+/g, '_') : 'Semua';
+    link.setAttribute("download", `Daftar_Perusahaan_${safeStatus}_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportPlantStatusCSV = () => {
+    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam Total (Ha)", `Realisasi Khusus ${selectedPlantStatus} (Ha)`, "Status"];
+    let csvContent = headers.join(",") + "\n";
+    dashboardPlantStatusCompanies.forEach(c => {
+      const tasks = obligationsData[c.id] || [];
+      tasks.forEach(task => {
+        let specificArea = 0;
+        if (task.riwayat_tanam) {
+          task.riwayat_tanam.forEach(r => {
+            const s = r.status || 'P0';
+            if (s === selectedPlantStatus) specificArea += (Number(r.luas) || 0);
+          });
+        }
+        if (specificArea > 0) {
+           const totals = getTaskTotals(task);
+           const luasSK = Number(task.luas) || 0;
+           csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${specificArea}","${task.status || c.status}"\n`;
+        }
+      });
+    });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Daftar_Perusahaan_${selectedPlantStatus}_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const printDashboardStatus = () => {
     const title = "LAPORAN STATUS PEMENUHAN KEWAJIBAN"; 
     const subtitle = `Filter Status: ${selectedDashboardStatus} | Total Unit: ${dashboardDetailCompanies.length}`;
@@ -537,7 +631,7 @@ export default function App() {
           <p className="text-lg md:text-xl text-green-100 mb-12 tracking-wide font-medium max-w-3xl">Di Wilayah Kerja BPDAS Kahayan</p>
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
             <button onClick={() => setAuthView('login')} className="px-8 py-3.5 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg text-lg transition-all shadow-md flex items-center justify-center gap-2"><Lock className="w-5 h-5" /> Masuk Aplikasi</button>
-            <button onClick={() => setAuthView('register')} className="px-8 py-3.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/30 text-white font-bold rounded-lg text-lg transition-all flex items-center justify-center gap-2"><User className="w-5 h-5" /> Daftar Akun Baru</button>
+            <button onClick={() => setAuthView('register')} className="px-8 py-3.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/30 text-white font-bold rounded-lg text-lg transition-all flex items-center justify-center gap-2"><UserPlus className="w-5 h-5" /> Daftar Akun Baru</button>
           </div>
         </div>
         <div className="absolute bottom-6 text-white/50 text-xs font-semibold tracking-widest uppercase">Kementerian Kehutanan RI</div>
@@ -724,123 +818,123 @@ export default function App() {
             </div>
           )}
 
-          {/* DASHBOARD */}
+          {/* ================= DASHBOARD ================= */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-6 pb-10 animate-in fade-in duration-500">
+            <div className="space-y-8 pb-10 animate-in fade-in duration-500">
               
               {/* FILTER KATEGORI */}
               <div className="flex bg-white p-1 rounded-md border border-gray-300 w-fit shadow-sm">
-                <button onClick={() => setDashboardCategory('Semua')} className={`px-6 py-2 rounded-md font-semibold transition-all ${dashboardCategory === 'Semua' ? 'bg-gray-700 text-white shadow' : 'text-gray-600'}`}>Semua</button>
-                <button onClick={() => setDashboardCategory('PPKH')} className={`px-6 py-2 rounded-md font-semibold transition-all ${dashboardCategory === 'PPKH' ? 'bg-amber-600 text-white shadow' : 'text-gray-600'}`}>PPKH</button>
-                <button onClick={() => setDashboardCategory('PKTMKH')} className={`px-6 py-2 rounded-md font-semibold transition-all ${dashboardCategory === 'PKTMKH' ? 'bg-green-700 text-white shadow' : 'text-gray-600'}`}>PKTMKH</button>
+                <button onClick={() => setDashboardCategory('Semua')} className={`px-6 py-2 rounded-md font-semibold transition-all ${dashboardCategory === 'Semua' ? 'bg-gray-700 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>Semua</button>
+                <button onClick={() => setDashboardCategory('PPKH')} className={`px-6 py-2 rounded-md font-semibold transition-all flex items-center gap-2 ${dashboardCategory === 'PPKH' ? 'bg-amber-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}><Mountain className="w-4 h-4" /> PPKH</button>
+                <button onClick={() => setDashboardCategory('PKTMKH')} className={`px-6 py-2 rounded-md font-semibold transition-all flex items-center gap-2 ${dashboardCategory === 'PKTMKH' ? 'bg-green-700 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}><Leaf className="w-4 h-4" /> PKTMKH</button>
               </div>
 
               {/* 1. TOTAL GENERAL */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm border-t-4 border-t-green-600">
-                  <p className="text-xs font-bold text-gray-500 uppercase mb-2">Rehabilitasi DAS</p>
-                  <p className="text-3xl font-bold text-green-700">{areaStats.totalDAS.toLocaleString('id-ID')} <span className="text-xs text-gray-400 font-semibold">Ha</span></p>
-                  <p className="text-[11px] text-gray-400 mt-1">{areaStats.countDAS} Unit Aktif</p>
+                <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-green-600">
+                  <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Rehabilitasi DAS</p>
+                  <p className="text-4xl font-black text-green-700">{areaStats.totalDAS.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
+                  <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countDAS} UNIT AKTIF</p>
                 </div>
-                <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm border-t-4 border-t-amber-500">
-                  <p className="text-xs font-bold text-gray-500 uppercase mb-2">Reklamasi Hutan</p>
-                  <p className="text-3xl font-bold text-amber-600">{areaStats.totalReklamasi.toLocaleString('id-ID')} <span className="text-xs text-gray-400 font-semibold">Ha</span></p>
-                  <p className="text-[11px] text-gray-400 mt-1">{areaStats.countReklamasi} Unit Aktif</p>
+                <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-amber-500">
+                  <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Reklamasi Hutan</p>
+                  <p className="text-4xl font-black text-amber-600">{areaStats.totalReklamasi.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
+                  <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countReklamasi} UNIT AKTIF</p>
                 </div>
-                <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm border-t-4 border-t-blue-500">
-                  <p className="text-xs font-bold text-gray-500 uppercase mb-2">Reboisasi Pengganti</p>
-                  <p className="text-3xl font-bold text-blue-600">{areaStats.totalReboisasi.toLocaleString('id-ID')} <span className="text-xs text-gray-400 font-semibold">Ha</span></p>
-                  <p className="text-[11px] text-gray-400 mt-1">{areaStats.countReboisasi} Unit Aktif</p>
-                </div>
-              </div>
-
-              {/* 2. REKAPITULASI PROGRES PEMENUHAN KEWAJIBAN (BAR CHART) */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow p-6">
-                <h3 className="font-bold text-gray-900 mb-6 flex items-center gap-2"><PieChart className="w-5 h-5 text-blue-600" /> Rekapitulasi progres pemenuhan kewajiban pemegang PPKH dan PKTMKH</h3>
-                <div className="space-y-6">
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-2">
-                      <span className="text-gray-700">Penyusunan RKP</span>
-                      <span className="text-blue-700">{globalProgress.pctRKP.toFixed(1)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
-                      <div className="bg-blue-600 h-full transition-all duration-1000" style={{ width: `${globalProgress.pctRKP}%` }}></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-2">
-                      <span className="text-gray-700">Realisasi Penanaman</span>
-                      <span className="text-green-700">{globalProgress.pctTanam.toFixed(1)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
-                      <div className="bg-green-600 h-full transition-all duration-1000" style={{ width: `${globalProgress.pctTanam}%` }}></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-2">
-                      <span className="text-gray-700">Serah Terima BAST</span>
-                      <span className="text-orange-700">{globalProgress.pctST.toFixed(1)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
-                      <div className="bg-orange-500 h-full transition-all duration-1000" style={{ width: `${globalProgress.pctST}%` }}></div>
-                    </div>
-                  </div>
+                <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-blue-500">
+                  <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Reboisasi Pengganti</p>
+                  <p className="text-4xl font-black text-blue-600">{areaStats.totalReboisasi.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
+                  <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countReboisasi} UNIT AKTIF</p>
                 </div>
               </div>
 
-              {/* 3. TREN KINERJA TAHUNAN (Layar Lebar & Teks SERAH TERIMA) */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 w-full">
-                <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-purple-600"/> Tren Kinerja Tahunan</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                   <div className="bg-gray-50 rounded-lg p-5 border border-gray-100">
-                      <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">RKP</p>
-                      <div className="h-48 flex items-end gap-1.5">
+              {/* 2. REKAPITULASI PROGRES PEMENUHAN KEWAJIBAN */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8">
+                <h3 className="text-lg font-black text-gray-900 mb-8 flex items-center gap-3"><PieChart className="w-6 h-6 text-blue-600" /> Rekapitulasi progres pemenuhan kewajiban pemegang PPKH dan PKTMKH</h3>
+                <div className="space-y-8">
+                  <div>
+                    <div className="flex justify-between text-xs font-black uppercase tracking-widest text-gray-500 mb-3">
+                      <span>Penyusunan RKP</span>
+                      <span className="text-blue-700 text-sm">{globalProgress.pctRKP.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-4 rounded-full overflow-hidden shadow-inner">
+                      <div className="bg-blue-600 h-full rounded-full transition-all duration-1000" style={{ width: `${globalProgress.pctRKP}%` }}></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-black uppercase tracking-widest text-gray-500 mb-3">
+                      <span>Realisasi Penanaman</span>
+                      <span className="text-green-700 text-sm">{globalProgress.pctTanam.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-4 rounded-full overflow-hidden shadow-inner">
+                      <div className="bg-green-600 h-full rounded-full transition-all duration-1000" style={{ width: `${globalProgress.pctTanam}%` }}></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-black uppercase tracking-widest text-gray-500 mb-3">
+                      <span>Serah Terima</span>
+                      <span className="text-orange-700 text-sm">{globalProgress.pctST.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-4 rounded-full overflow-hidden shadow-inner">
+                      <div className="bg-orange-500 h-full rounded-full transition-all duration-1000" style={{ width: `${globalProgress.pctST}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. TREN KINERJA TAHUNAN */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 w-full">
+                <h3 className="text-lg font-black text-gray-900 mb-8 flex items-center gap-3"><TrendingUp className="w-6 h-6 text-purple-600"/> Tren Kinerja Tahunan</h3>
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                   <div className="bg-gray-50 rounded-xl p-6 border border-gray-100 shadow-inner">
+                      <p className="text-[12px] font-black text-gray-500 uppercase tracking-widest text-center mb-6 border-b border-gray-200 pb-3">Penyusunan RKP</p>
+                      <div className="h-64 flex items-end gap-2">
                          {yearlyProgress.yearsList.map(y => {
                             const val = yearlyProgress.data.rkp[y] || 0;
                             const pct = yearlyProgress.maxRKP > 0 ? (val / yearlyProgress.maxRKP) * 100 : 0;
                             return (
-                               <div key={`rkp-${y}`} className="flex-1 flex flex-col items-center justify-end group">
-                                  <span className="text-[9px] font-black text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
-                                  <div className="w-full bg-blue-100 rounded-t-sm flex items-end justify-center" style={{height: '100%'}}>
-                                     <div className="w-full bg-blue-500 rounded-t-sm transition-all duration-1000" style={{height: `${pct}%`}}></div>
+                               <div key={`rkp-${y}`} className="flex-1 flex flex-col items-center justify-end group relative">
+                                  <span className="text-[10px] font-black text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity mb-2">{val.toLocaleString('id-ID')}</span>
+                                  <div className="w-full bg-blue-100 rounded-t-md flex items-end justify-center" style={{height: '100%'}}>
+                                     <div className="w-full bg-blue-500 rounded-t-md transition-all duration-1000 hover:bg-blue-400" style={{height: `${pct}%`}}></div>
                                   </div>
-                                  <span className="text-[9px] font-bold text-gray-400 mt-1">{y}</span>
+                                  <span className="text-[10px] font-bold text-gray-400 mt-3">{y}</span>
                                </div>
                             )
                          })}
                       </div>
                    </div>
-                   <div className="bg-gray-50 rounded-lg p-5 border border-gray-100">
-                      <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">PENANAMAN</p>
-                      <div className="h-48 flex items-end gap-1.5">
+                   <div className="bg-gray-50 rounded-xl p-6 border border-gray-100 shadow-inner">
+                      <p className="text-[12px] font-black text-gray-500 uppercase tracking-widest text-center mb-6 border-b border-gray-200 pb-3">Realisasi Penanaman</p>
+                      <div className="h-64 flex items-end gap-2">
                          {yearlyProgress.yearsList.map(y => {
                             const val = yearlyProgress.data.tanam[y] || 0;
                             const pct = yearlyProgress.maxTanam > 0 ? (val / yearlyProgress.maxTanam) * 100 : 0;
                             return (
-                               <div key={`tnm-${y}`} className="flex-1 flex flex-col items-center justify-end group">
-                                  <span className="text-[9px] font-black text-green-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
-                                  <div className="w-full bg-green-100 rounded-t-sm flex items-end justify-center" style={{height: '100%'}}>
-                                     <div className="w-full bg-green-500 rounded-t-sm transition-all duration-1000" style={{height: `${pct}%`}}></div>
+                               <div key={`tnm-${y}`} className="flex-1 flex flex-col items-center justify-end group relative">
+                                  <span className="text-[10px] font-black text-green-600 opacity-0 group-hover:opacity-100 transition-opacity mb-2">{val.toLocaleString('id-ID')}</span>
+                                  <div className="w-full bg-green-100 rounded-t-md flex items-end justify-center" style={{height: '100%'}}>
+                                     <div className="w-full bg-green-500 rounded-t-md transition-all duration-1000 hover:bg-green-400" style={{height: `${pct}%`}}></div>
                                   </div>
-                                  <span className="text-[9px] font-bold text-gray-400 mt-1">{y}</span>
+                                  <span className="text-[10px] font-bold text-gray-400 mt-3">{y}</span>
                                </div>
                             )
                          })}
                       </div>
                    </div>
-                   <div className="bg-gray-50 rounded-lg p-5 border border-gray-100">
-                      <p className="text-[11px] font-black text-gray-500 uppercase tracking-widest text-center mb-4 border-b border-gray-200 pb-2">SERAH TERIMA</p>
-                      <div className="h-48 flex items-end gap-1.5">
+                   <div className="bg-gray-50 rounded-xl p-6 border border-gray-100 shadow-inner">
+                      <p className="text-[12px] font-black text-gray-500 uppercase tracking-widest text-center mb-6 border-b border-gray-200 pb-3">Serah Terima</p>
+                      <div className="h-64 flex items-end gap-2">
                          {yearlyProgress.yearsList.map(y => {
                             const val = yearlyProgress.data.st[y] || 0;
                             const pct = yearlyProgress.maxST > 0 ? (val / yearlyProgress.maxST) * 100 : 0;
                             return (
-                               <div key={`st-${y}`} className="flex-1 flex flex-col items-center justify-end group">
-                                  <span className="text-[9px] font-black text-orange-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">{val}</span>
-                                  <div className="w-full bg-orange-100 rounded-t-sm flex items-end justify-center" style={{height: '100%'}}>
-                                     <div className="w-full bg-orange-400 rounded-t-sm transition-all duration-1000" style={{height: `${pct}%`}}></div>
+                               <div key={`st-${y}`} className="flex-1 flex flex-col items-center justify-end group relative">
+                                  <span className="text-[10px] font-black text-orange-600 opacity-0 group-hover:opacity-100 transition-opacity mb-2">{val.toLocaleString('id-ID')}</span>
+                                  <div className="w-full bg-orange-100 rounded-t-md flex items-end justify-center" style={{height: '100%'}}>
+                                     <div className="w-full bg-orange-500 rounded-t-md transition-all duration-1000 hover:bg-orange-400" style={{height: `${pct}%`}}></div>
                                   </div>
-                                  <span className="text-[9px] font-bold text-gray-400 mt-1">{y}</span>
+                                  <span className="text-[10px] font-bold text-gray-400 mt-3">{y}</span>
                                </div>
                             )
                          })}
@@ -850,63 +944,251 @@ export default function App() {
               </div>
 
               {/* 4. KOMPOSISI UMUR TANAMAN */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 w-full">
-                 <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-2"><Layers className="w-5 h-5 text-teal-600"/> Komposisi Umur Tanaman</h3>
-                 <div className="bg-gray-50 rounded-lg p-6 border border-gray-100">
-                    <div className="flex justify-between text-[11px] font-black text-gray-500 uppercase tracking-widest mb-3">
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 w-full">
+                 <h3 className="text-lg font-black text-gray-900 mb-8 flex items-center gap-3"><Layers className="w-6 h-6 text-teal-600"/> Komposisi Umur Tanaman</h3>
+                 
+                 <div className="bg-gray-50 rounded-xl p-8 border border-gray-100 shadow-inner mb-8">
+                    <div className="flex justify-between text-xs font-black text-gray-500 uppercase tracking-widest mb-4">
                        <span>Total Realisasi Tanam: {plantStatusStats.total.toLocaleString('id-ID')} Ha</span><span>100%</span>
                     </div>
-                    <div className="w-full h-8 flex rounded-full overflow-hidden shadow-inner bg-gray-200 mb-6">
-                       {plantStatusStats.pctP0 > 0 && <div className="h-full bg-sky-500 flex items-center justify-center text-[11px] font-black text-white" style={{width: `${plantStatusStats.pctP0}%`}}>{plantStatusStats.pctP0 > 5 ? `${plantStatusStats.pctP0.toFixed(0)}%` : ''}</div>}
-                       {plantStatusStats.pctP1 > 0 && <div className="h-full bg-teal-500 flex items-center justify-center text-[11px] font-black text-white" style={{width: `${plantStatusStats.pctP1}%`}}>{plantStatusStats.pctP1 > 5 ? `${plantStatusStats.pctP1.toFixed(0)}%` : ''}</div>}
-                       {plantStatusStats.pctP2 > 0 && <div className="h-full bg-emerald-700 flex items-center justify-center text-[11px] font-black text-white" style={{width: `${plantStatusStats.pctP2}%`}}>{plantStatusStats.pctP2 > 5 ? `${plantStatusStats.pctP2.toFixed(0)}%` : ''}</div>}
-                    </div>
-                    <div className="flex justify-center gap-8">
-                       <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-sky-500 shadow-sm"></div><span className="text-sm font-bold text-gray-700">P0 ({plantStatusStats.p0} Ha)</span></div>
-                       <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-teal-500 shadow-sm"></div><span className="text-sm font-bold text-gray-700">P1 ({plantStatusStats.p1} Ha)</span></div>
-                       <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-emerald-700 shadow-sm"></div><span className="text-sm font-bold text-gray-700">P2 ({plantStatusStats.p2} Ha)</span></div>
+                    <div className="w-full h-8 flex rounded-full overflow-hidden shadow-inner bg-gray-200 mb-8">
+                       {plantStatusStats.pctP0 > 0 && <div className="h-full bg-sky-500 flex items-center justify-center text-xs font-black text-white" style={{width: `${plantStatusStats.pctP0}%`}} title={`P0: ${plantStatusStats.pctP0.toFixed(1)}%`}>{plantStatusStats.pctP0 > 5 ? `${plantStatusStats.pctP0.toFixed(0)}%` : ''}</div>}
+                       {plantStatusStats.pctP1 > 0 && <div className="h-full bg-teal-500 flex items-center justify-center text-xs font-black text-white" style={{width: `${plantStatusStats.pctP1}%`}} title={`P1: ${plantStatusStats.pctP1.toFixed(1)}%`}>{plantStatusStats.pctP1 > 5 ? `${plantStatusStats.pctP1.toFixed(0)}%` : ''}</div>}
+                       {plantStatusStats.pctP2 > 0 && <div className="h-full bg-emerald-600 flex items-center justify-center text-xs font-black text-white" style={{width: `${plantStatusStats.pctP2}%`}} title={`P2: ${plantStatusStats.pctP2.toFixed(1)}%`}>{plantStatusStats.pctP2 > 5 ? `${plantStatusStats.pctP2.toFixed(0)}%` : ''}</div>}
                     </div>
                  </div>
+
+                 <p className="text-[13px] text-gray-500 mb-4 italic">Klik salah satu kartu di bawah ini untuk melihat detail perusahaan berdasarkan status tanaman.</p>
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div onClick={() => setSelectedPlantStatus(selectedPlantStatus === 'P0' ? null : 'P0')} className={`bg-sky-50 border p-5 rounded-xl flex items-center gap-5 cursor-pointer hover:shadow-md transition-all ${selectedPlantStatus === 'P0' ? 'ring-2 ring-sky-400 border-sky-300 shadow-md transform scale-[1.02]' : 'border-sky-100'}`}>
+                      <div className="w-3 h-16 bg-sky-500 rounded-full"></div>
+                      <div>
+                        <p className="text-xs font-bold text-sky-800 uppercase tracking-wide">Tanaman Baru (P0)</p>
+                        <p className="text-3xl font-black text-sky-900 mt-1">{plantStatusStats.p0.toLocaleString('id-ID')} <span className="text-sm font-semibold text-sky-700">Ha</span></p>
+                      </div>
+                    </div>
+                    <div onClick={() => setSelectedPlantStatus(selectedPlantStatus === 'P1' ? null : 'P1')} className={`bg-teal-50 border p-5 rounded-xl flex items-center gap-5 cursor-pointer hover:shadow-md transition-all ${selectedPlantStatus === 'P1' ? 'ring-2 ring-teal-400 border-teal-300 shadow-md transform scale-[1.02]' : 'border-teal-100'}`}>
+                      <div className="w-3 h-16 bg-teal-500 rounded-full"></div>
+                      <div>
+                        <p className="text-xs font-bold text-teal-800 uppercase tracking-wide">Pemeliharaan 1 (P1)</p>
+                        <p className="text-3xl font-black text-teal-900 mt-1">{plantStatusStats.p1.toLocaleString('id-ID')} <span className="text-sm font-semibold text-teal-700">Ha</span></p>
+                      </div>
+                    </div>
+                    <div onClick={() => setSelectedPlantStatus(selectedPlantStatus === 'P2' ? null : 'P2')} className={`bg-emerald-50 border p-5 rounded-xl flex items-center gap-5 cursor-pointer hover:shadow-md transition-all ${selectedPlantStatus === 'P2' ? 'ring-2 ring-emerald-400 border-emerald-300 shadow-md transform scale-[1.02]' : 'border-emerald-100'}`}>
+                      <div className="w-3 h-16 bg-emerald-600 rounded-full"></div>
+                      <div>
+                        <p className="text-xs font-bold text-emerald-900 uppercase tracking-wide">Pemeliharaan 2+ (P2)</p>
+                        <p className="text-3xl font-black text-emerald-950 mt-1">{plantStatusStats.p2.toLocaleString('id-ID')} <span className="text-sm font-semibold text-emerald-800">Ha</span></p>
+                      </div>
+                    </div>
+                 </div>
+
+                 {/* TABEL DETAIL STATUS TANAMAN */}
+                 {selectedPlantStatus && (
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-lg p-8 mt-6 animate-in slide-in-from-bottom-4 duration-500">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-4">
+                        <div>
+                          <h3 className="font-bold text-gray-900 tracking-tight text-lg flex items-center gap-2">
+                            <Layers className="w-5 h-5 text-teal-600" />
+                            Daftar Perusahaan: Status {selectedPlantStatus === 'P0' ? 'Tanaman Baru (P0)' : (selectedPlantStatus === 'P1' ? 'Pemeliharaan 1 (P1)' : 'Pemeliharaan 2+ (P2)')}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button onClick={exportPlantStatusCSV} className="px-4 py-2.5 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:text-teal-800 font-bold rounded-lg text-[13px] transition-colors flex items-center gap-2 border border-teal-200 shadow-sm">
+                            <Download className="w-4 h-4" /> Export CSV
+                          </button>
+                          <button onClick={() => setSelectedPlantStatus(null)} className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200">
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="overflow-auto w-full border border-gray-200 rounded-xl max-h-[400px]">
+                        <table className="w-full text-left whitespace-nowrap text-[14px]">
+                          <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+                            <tr>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Unit Perusahaan</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-center">Tipe</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">No. SK Penetapan</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Luas SK (Ha)</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Total Tanam (Ha)</th>
+                              <th className="px-6 py-4 font-bold text-teal-700 uppercase text-xs tracking-wide text-right bg-teal-50/50">Luas {selectedPlantStatus} (Ha)</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {dashboardPlantStatusCompanies.flatMap((c) => {
+                              const tasks = obligationsData[c.id] || [];
+                              return tasks.map((taskData, idx) => {
+                                let specificArea = 0;
+                                if (taskData.riwayat_tanam) {
+                                  taskData.riwayat_tanam.forEach(r => {
+                                    const s = r.status || 'P0';
+                                    if (s === selectedPlantStatus) specificArea += (Number(r.luas) || 0);
+                                  });
+                                }
+                                if (specificArea === 0) return null;
+                                const totals = getTaskTotals(taskData);
+                                const luasSK = Number(taskData.luas) || 0;
+                                const currentStatus = taskData.status || c.status;
+                                
+                                return (
+                                  <tr key={`${c.id}-${taskData.id || idx}`} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-6 py-4">
+                                      <p className="font-bold text-gray-900">{c.name}</p>
+                                      <p className="text-xs text-gray-500 mt-1">{c.sector}</p>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                      <div className="flex flex-col items-center gap-1.5">
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${c.category === 'PPKH' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-green-100 text-green-800 border-green-200'}`}>{c.category}</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-6 py-4"><span className="font-mono text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded border border-gray-200">{taskData.sk_lokasi || '-'}</span></td>
+                                    <td className="px-6 py-4 text-right font-bold text-gray-800">{luasSK.toLocaleString('id-ID')}</td>
+                                    <td className="px-6 py-4 text-right"><span className="font-bold text-green-700">{totals.realisasi_tanam.toLocaleString('id-ID')}</span></td>
+                                    <td className="px-6 py-4 text-right bg-teal-50/30"><span className="font-bold text-teal-700 bg-teal-100 px-3 py-1.5 rounded-md border border-teal-200">{specificArea.toLocaleString('id-ID')}</span></td>
+                                    <td className="px-6 py-4 text-center"><span className={`px-3 py-1 rounded-md text-[11px] font-bold border uppercase ${getStatusColor(currentStatus)}`}>{currentStatus}</span></td>
+                                  </tr>
+                                );
+                              }).filter(Boolean);
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                 )}
               </div>
 
               {/* 5. STATUS PEMENUHAN KEWAJIBAN & EWS (DIGABUNG) */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow p-6">
-                <h3 className="font-bold text-gray-900 mb-6 flex items-center gap-2 px-1"><ShieldAlert className="w-5 h-5 text-rose-600" /> Status Kepatuhan & Peringatan Dini (Smart EWS)</h3>
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8">
+                <h3 className="text-lg font-black text-gray-900 mb-2 flex items-center gap-3"><ShieldAlert className="w-6 h-6 text-rose-600" /> Status Kepatuhan & Peringatan Dini (Smart EWS)</h3>
+                <p className="text-[13px] text-gray-500 mb-8 italic">Klik pada kartu status untuk memfilter daftar perusahaan di bawahnya.</p>
                 
                 {/* Kartu Status Admin */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                   <div className="bg-green-50 p-5 rounded-lg border border-green-200 shadow-sm">
-                      <p className="text-[10px] font-black text-green-700 uppercase mb-1">Status Tertib</p>
-                      <p className="text-2xl font-black text-green-800">{currentStats.tertib} <span className="text-[10px] font-bold">Unit</span></p>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                   <div onClick={() => setSelectedDashboardStatus(selectedDashboardStatus === 'Tertib' ? null : 'Tertib')} className={`bg-green-50 p-6 rounded-xl border-2 shadow-sm cursor-pointer transition-all ${selectedDashboardStatus === 'Tertib' ? 'border-green-500 ring-2 ring-green-200 transform scale-105' : 'border-green-200 hover:border-green-400'}`}>
+                      <p className="text-xs font-black text-green-700 uppercase mb-2 tracking-widest">Status Tertib</p>
+                      <p className="text-4xl font-black text-green-800">{currentStats.tertib} <span className="text-sm font-bold text-green-600">Unit</span></p>
                    </div>
-                   <div className="bg-yellow-50 p-5 rounded-lg border border-yellow-200 shadow-sm">
-                      <p className="text-[10px] font-black text-yellow-700 uppercase mb-1">Peringatan SP1</p>
-                      <p className="text-2xl font-black text-yellow-800">{currentStats.sp1} <span className="text-[10px] font-bold">Unit</span></p>
+                   <div onClick={() => setSelectedDashboardStatus(selectedDashboardStatus === 'SP1' ? null : 'SP1')} className={`bg-yellow-50 p-6 rounded-xl border-2 shadow-sm cursor-pointer transition-all ${selectedDashboardStatus === 'SP1' ? 'border-yellow-500 ring-2 ring-yellow-200 transform scale-105' : 'border-yellow-200 hover:border-yellow-400'}`}>
+                      <p className="text-xs font-black text-yellow-700 uppercase mb-2 tracking-widest">Peringatan SP1</p>
+                      <p className="text-4xl font-black text-yellow-800">{currentStats.sp1} <span className="text-sm font-bold text-yellow-600">Unit</span></p>
                    </div>
-                   <div className="bg-orange-50 p-5 rounded-lg border border-orange-200 shadow-sm">
-                      <p className="text-[10px] font-black text-orange-700 uppercase mb-1">Peringatan SP2</p>
-                      <p className="text-2xl font-black text-orange-800">{currentStats.sp2} <span className="text-[10px] font-bold">Unit</span></p>
+                   <div onClick={() => setSelectedDashboardStatus(selectedDashboardStatus === 'SP2' ? null : 'SP2')} className={`bg-orange-50 p-6 rounded-xl border-2 shadow-sm cursor-pointer transition-all ${selectedDashboardStatus === 'SP2' ? 'border-orange-500 ring-2 ring-orange-200 transform scale-105' : 'border-orange-200 hover:border-orange-400'}`}>
+                      <p className="text-xs font-black text-orange-700 uppercase mb-2 tracking-widest">Peringatan SP2</p>
+                      <p className="text-4xl font-black text-orange-800">{currentStats.sp2} <span className="text-sm font-bold text-orange-600">Unit</span></p>
                    </div>
-                   <div className="bg-red-50 p-5 rounded-lg border border-red-200 shadow-sm">
-                      <p className="text-[10px] font-black text-red-700 uppercase mb-1">Peringatan SP3</p>
-                      <p className="text-2xl font-black text-red-800">{currentStats.sp3} <span className="text-[10px] font-bold">Unit</span></p>
+                   <div onClick={() => setSelectedDashboardStatus(selectedDashboardStatus === 'SP3' ? null : 'SP3')} className={`bg-red-50 p-6 rounded-xl border-2 shadow-sm cursor-pointer transition-all ${selectedDashboardStatus === 'SP3' ? 'border-red-500 ring-2 ring-red-200 transform scale-105' : 'border-red-200 hover:border-red-400'}`}>
+                      <p className="text-xs font-black text-red-700 uppercase mb-2 tracking-widest">Peringatan SP3</p>
+                      <p className="text-4xl font-black text-red-800">{currentStats.sp3} <span className="text-sm font-bold text-red-600">Unit</span></p>
                    </div>
                 </div>
 
+                {/* TABEL DETAIL STATUS */}
+                {selectedDashboardStatus && (
+                  <div className="bg-gray-50 rounded-xl border border-gray-200 shadow-inner p-6 mb-10 animate-in slide-in-from-top-4 duration-500">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-200 pb-4">
+                      <div>
+                        <h3 className="font-bold text-gray-900 tracking-tight text-lg flex items-center gap-2">
+                          <Database className="w-5 h-5 text-blue-600" />
+                          Daftar Perusahaan: {selectedDashboardStatus === 'Semua' ? 'Seluruh Unit Aktif' : (selectedDashboardStatus === 'Tertib' ? 'Status Tertib' : `Peringatan ${selectedDashboardStatus}`)}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button onClick={exportDashboardCSV} className="px-4 py-2.5 bg-blue-600 text-white hover:bg-blue-700 font-bold rounded-lg text-[13px] transition-colors flex items-center gap-2 shadow-md">
+                          <Download className="w-4 h-4" /> Export CSV
+                        </button>
+                        <button onClick={() => setSelectedDashboardStatus(null)} className="p-2.5 bg-white text-gray-500 hover:text-red-500 hover:bg-red-50 border border-gray-200 rounded-lg transition-colors shadow-sm">
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="overflow-auto w-full border border-gray-200 rounded-xl bg-white max-h-[400px]">
+                      <table className="w-full text-left whitespace-nowrap text-[14px]">
+                        <thead className="bg-gray-100 border-b border-gray-200 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Unit Perusahaan</th>
+                            <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-center">Tipe</th>
+                            <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">No. SK Penetapan</th>
+                            <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Luas SK (Ha)</th>
+                            <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Realisasi (Ha)</th>
+                            <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Serah Terima (Ha)</th>
+                            <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {dashboardDetailCompanies.flatMap((c) => {
+                            const tasks = obligationsData[c.id] || [];
+                            if (tasks.length === 0) return (
+                              <tr key={c.id} className="hover:bg-gray-50">
+                                 <td className="px-6 py-4 font-bold text-gray-900">{c.name}</td>
+                                 <td className="px-6 py-4 text-center"><span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${c.category === 'PPKH' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-green-100 text-green-800 border-green-200'}`}>{c.category}</span></td>
+                                 <td className="px-6 py-4 text-gray-400 text-center">-</td>
+                                 <td className="px-6 py-4 text-right">0</td>
+                                 <td className="px-6 py-4 text-right">0</td>
+                                 <td className="px-6 py-4 text-right">0</td>
+                                 <td className="px-6 py-4 text-center"><span className={`px-3 py-1.5 rounded-md text-[11px] font-bold border uppercase ${getStatusColor(c.status)}`}>{c.status}</span></td>
+                              </tr>
+                            );
+                            
+                            return tasks.map((taskData, idx) => {
+                              const totals = getTaskTotals(taskData);
+                              const luasSK = Number(taskData.luas) || 0;
+                              const currentStatus = taskData.status || c.status;
+                              
+                              return (
+                                <tr key={`${c.id}-${taskData.id || idx}`} className="hover:bg-gray-50 transition-colors">
+                                  <td className="px-6 py-4">
+                                    <p className="font-bold text-gray-900">{c.name}</p>
+                                    <p className="text-[11px] text-gray-500 mt-1">{c.sector}</p>
+                                  </td>
+                                  <td className="px-6 py-4 text-center">
+                                    <div className="flex flex-col items-center gap-1.5">
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${c.category === 'PPKH' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-green-100 text-green-800 border-green-200'}`}>{c.category}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4"><span className="font-mono text-[11px] font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded border border-gray-200">{taskData.sk_lokasi || '-'}</span></td>
+                                  <td className="px-6 py-4 text-right font-bold text-gray-800">{luasSK.toLocaleString('id-ID')}</td>
+                                  <td className="px-6 py-4 text-right"><span className="font-bold text-green-700">{totals.realisasi_tanam.toLocaleString('id-ID')}</span></td>
+                                  <td className="px-6 py-4 text-right"><span className="font-bold text-blue-700">{totals.luas_serah_terima.toLocaleString('id-ID')}</span></td>
+                                  <td className="px-6 py-4 text-center"><span className={`px-3 py-1.5 rounded-md text-[11px] font-bold border uppercase ${getStatusColor(currentStatus)}`}>{currentStatus}</span></td>
+                                </tr>
+                              );
+                            });
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 {/* Daftar Rincian EWS */}
                 <div className="px-1 border-t border-gray-100 pt-6">
-                  <h4 className="font-bold text-gray-700 mb-4 text-sm">Rincian Perusahaan Membutuhkan Perhatian ({smartAlerts.length})</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <h4 className="font-black text-gray-800 mb-6 text-base uppercase tracking-widest border-b border-gray-200 pb-3 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-rose-600" />
+                    Rincian Peringatan Cerdas (Smart EWS) <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md text-xs">{smartAlerts.length} Peringatan</span>
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {smartAlerts.map(alert => (
-                      <div key={alert.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:border-red-300 transition-colors">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="font-bold text-[13px] text-gray-900 truncate pr-2">{alert.company}</span>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase ${alert.type === 'SP3' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-orange-100 text-orange-700 border-orange-200'}`}>{alert.type}</span>
+                      <div key={alert.id} className="bg-white p-5 rounded-xl border-l-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                           style={{ borderLeftColor: alert.type === 'SP3' ? '#ef4444' : (alert.type === 'SP2' ? '#f97316' : '#eab308') }}>
+                        <div>
+                          <div className="flex justify-between items-start mb-3">
+                            <span className="font-bold text-[14px] text-gray-900 truncate pr-2">{alert.company}</span>
+                            <span className={`text-[10px] font-black px-2 py-1 rounded-md border uppercase tracking-widest ${alert.type === 'SP3' ? 'bg-red-50 text-red-700 border-red-200' : (alert.type === 'SP2' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200')}`}>{alert.type}</span>
+                          </div>
+                          <p className="text-[13px] text-gray-600 leading-relaxed">{alert.message}</p>
                         </div>
-                        <p className="text-[12px] text-gray-600 leading-tight">{alert.message}</p>
                       </div>
                     ))}
-                    {smartAlerts.length === 0 && <p className="text-sm text-gray-400 italic col-span-full">Semua unit perusahaan dalam kondisi tertib. Tidak ada peringatan kepatuhan saat ini.</p>}
+                    {smartAlerts.length === 0 && (
+                      <div className="col-span-full flex flex-col items-center justify-center p-10 bg-green-50 rounded-2xl border border-green-200 border-dashed">
+                        <CheckCircle className="w-12 h-12 text-green-500 mb-4 opacity-50" />
+                        <p className="text-lg font-black text-green-800 tracking-tight">Kondisi Terkendali</p>
+                        <p className="text-sm text-green-600 font-semibold mt-1">Semua unit perusahaan dalam batas aman. Tidak ada peringatan EWS.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -916,138 +1198,170 @@ export default function App() {
           {/* MANAJEMEN DATA */}
           {activeTab === 'companies' && (
             <div className="flex flex-col gap-6 pb-10 animate-in fade-in duration-500">
-              <div className={`bg-white rounded-lg border border-gray-200 shadow flex flex-col transition-all duration-500 ${selectedCompany ? 'h-[300px] shrink-0' : 'flex-1 min-h-[500px]'}`}>
-                <div className="p-4 border-b border-gray-200 flex flex-col xl:flex-row justify-between xl:items-center gap-4 bg-gray-50">
-                  <div className="relative w-full sm:w-80">
-                    <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
-                    <input type="text" placeholder="Cari perusahaan..." className="w-full pl-10 pr-4 py-2 text-[14px] bg-white border border-gray-300 rounded-md focus:ring-1 focus:ring-green-600 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <div className={`bg-white rounded-3xl border border-gray-100 shadow-xl flex flex-col transition-all duration-700 ${selectedCompany ? 'h-[300px] shrink-0' : 'flex-1 min-h-[600px]'}`}>
+                <div className="p-6 border-b border-gray-100 flex flex-col xl:flex-row justify-between xl:items-center gap-6 bg-gray-50/50 rounded-t-3xl">
+                  <div className="relative w-full sm:w-96">
+                    <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input type="text" placeholder="Pencarian Unit Perusahaan..." className="w-full pl-12 pr-6 py-3.5 text-[14px] bg-white border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-green-600 outline-none font-semibold" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button onClick={exportToCSV} className="px-4 py-2 bg-blue-600 text-white font-bold rounded-md text-[13px] shadow flex items-center gap-2"><Download className="w-4 h-4" /> Export CSV</button>
+                  <div className="flex items-center gap-4">
+                    <button onClick={exportToCSV} className="px-6 py-3.5 bg-blue-700 hover:bg-blue-800 text-white font-black rounded-2xl text-[12px] shadow-lg flex items-center gap-2 transition-all uppercase tracking-widest"><Download className="w-4 h-4" /> EXPORT DATA</button>
                     {(userProfile?.role === 'Superadmin' || userProfile?.role === 'Admin') && (
-                      <button onClick={handleAddCompany} className="px-4 py-2 bg-green-700 text-white font-bold rounded-md text-[13px] shadow flex items-center gap-2"><PlusCircle className="w-4 h-4" /> Tambah Unit</button>
+                      <button onClick={handleAddCompany} className="px-6 py-3.5 bg-green-700 hover:bg-green-800 text-white font-black rounded-2xl text-[12px] shadow-lg flex items-center gap-2 transition-all uppercase tracking-widest"><PlusCircle className="w-4 h-4" /> TAMBAH UNIT</button>
                     )}
                   </div>
                 </div>
 
-                <div className="overflow-auto flex-1 text-[14px] bg-white relative">
+                <div className="overflow-auto flex-1 text-[14px] bg-white relative rounded-b-3xl">
                   <table className="w-full text-left whitespace-nowrap">
-                    <thead className="bg-gray-100 border-b-2 border-gray-300 sticky top-0 z-10">
+                    <thead className="bg-gray-50 border-b-2 border-gray-100 sticky top-0 z-10">
                       <tr>
-                        <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs">Unit Perusahaan</th>
-                        <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs text-center">Tipe</th>
-                        <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs text-right">Luas SK (Ha)</th>
-                        <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs text-center">Status</th>
-                        <th className="px-6 py-4"></th>
+                        <th className="px-8 py-5 font-black text-gray-500 uppercase text-[10px] tracking-[0.2em]">Entitas & SK</th>
+                        <th className="px-8 py-5 font-black text-gray-500 uppercase text-[10px] tracking-[0.2em] text-center">Izin</th>
+                        <th className="px-8 py-5 font-black text-gray-500 uppercase text-[10px] tracking-[0.2em] text-right">Luas SK (Ha)</th>
+                        <th className="px-8 py-5 font-black text-gray-500 uppercase text-[10px] tracking-[0.2em] text-center">Status</th>
+                        <th className="px-8 py-5"></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-gray-50">
                       {currentCompanies.flatMap((c) => {
                         const tasks = obligationsData[c.id] || [];
-                        return tasks.map((taskData, idx) => (
-                          <tr key={`${c.id}-${idx}`} onClick={() => handleEditSelect(c)} className="hover:bg-green-50 cursor-pointer transition-colors">
-                            <td className="px-6 py-4">
-                              <p className="font-bold text-gray-900">{c.name}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">{c.sector} • {taskData.sk_lokasi}</p>
+                        return tasks.map((t, idx) => (
+                          <tr key={`${c.id}-${idx}`} onClick={() => handleEditSelect(c)} className="hover:bg-green-50/50 cursor-pointer transition-all group">
+                            <td className="px-8 py-6">
+                              <p className="font-black text-gray-900 group-hover:text-green-800 transition-colors text-base">{c.name}</p>
+                              <p className="text-[11px] font-bold text-gray-400 mt-1 uppercase tracking-widest">{c.sector} • {t.sk_lokasi || 'Tanpa SK'}</p>
                             </td>
-                            <td className="px-6 py-4 text-center">
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${c.category === 'PPKH' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>{c.category}</span>
+                            <td className="px-8 py-6 text-center">
+                              <span className={`text-[9px] font-black px-3 py-1 rounded-full border uppercase tracking-[0.1em] ${c.category === 'PPKH' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-green-100 text-green-800 border-green-200'}`}>{c.category}</span>
                             </td>
-                            <td className="px-6 py-4 text-right font-bold text-gray-800">{(Number(taskData.luas) || 0).toLocaleString('id-ID')}</td>
-                            <td className="px-6 py-4 text-center"><span className={`px-2.5 py-1 rounded text-[11px] font-bold border uppercase ${getStatusColor(taskData.status || c.status)}`}>{taskData.status || c.status}</span></td>
-                            <td className="px-6 py-4 text-right"><ChevronRight className="w-5 h-5 text-gray-400" /></td>
+                            <td className="px-8 py-6 text-right font-black text-gray-700">{(Number(t.luas) || 0).toLocaleString('id-ID')}</td>
+                            <td className="px-8 py-6 text-center">
+                              <span className={`px-4 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-widest shadow-sm ${getStatusColor(t.status || c.status)}`}>{t.status || c.status}</span>
+                            </td>
+                            <td className="px-8 py-6 text-right"><ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-green-600 transition-all" /></td>
                           </tr>
                         ));
                       })}
+                      {currentCompanies.length === 0 && (
+                        <tr><td colSpan="5" className="p-10 text-center text-gray-400 font-bold uppercase tracking-widest">Belum Ada Data Unit</td></tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
               {selectedCompany && editFormData && (
-                <div className="bg-white rounded-lg border border-gray-200 shadow-md flex flex-col shrink-0 animate-in slide-in-from-bottom-4 duration-500">
-                  <div className="p-4 md:p-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center shrink-0 rounded-t-lg">
+                <div className="bg-white rounded-[2rem] border border-gray-200 shadow-2xl flex flex-col shrink-0 animate-in slide-in-from-bottom-6 duration-700 mt-4">
+                  <div className="p-8 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center shrink-0 rounded-t-[2rem]">
                     <div>
-                      <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
-                        {editFormData.isNew ? <PlusCircle className="w-5 h-5 text-green-700" /> : <Edit3 className="w-5 h-5 text-green-700" />} 
-                        Formulir Manajemen Data Bersama
+                      <h3 className="font-black text-gray-900 text-2xl tracking-tight flex items-center gap-3">
+                        <Edit3 className="w-7 h-7 text-green-700" /> 
+                        Panel Kontrol Data Unit
                       </h3>
-                      <p className="text-sm text-gray-500 mt-1">Mengedit: <strong className="text-green-700">{editFormData.company.name || 'Baru'}</strong></p>
+                      <p className="text-sm font-bold text-gray-400 mt-1 uppercase tracking-widest">Mengelola: <span className="text-green-700 font-black">{editFormData.company.name || 'DATA BARU'}</span></p>
                     </div>
                     <div className="flex items-center gap-4">
-                      {showSaveSuccess && <span className="bg-green-100 text-green-800 px-4 py-2 rounded-md text-[13px] font-bold border border-green-300">Disimpan ke Database</span>}
-                      <button onClick={() => { setSelectedCompany(null); setEditFormData(null); }} className="p-2 text-gray-500 hover:text-red-600 transition-colors"><X className="w-5 h-5" /></button>
+                      {showSaveSuccess && <span className="bg-green-600 text-white px-6 py-2.5 rounded-full text-[11px] font-black animate-pulse shadow-lg uppercase tracking-widest">SINKRONISASI BERHASIL</span>}
+                      <button onClick={() => { setSelectedCompany(null); setEditFormData(null); }} className="p-3 text-gray-400 hover:text-red-600 bg-white hover:bg-red-50 rounded-2xl transition-all border border-gray-100 shadow-sm"><X className="w-6 h-6" /></button>
                     </div>
                   </div>
 
-                  <div className="p-6 md:p-8 space-y-8 bg-white overflow-y-auto max-h-[600px]">
-                    <section>
-                      <h4 className="text-[13px] font-bold text-gray-500 uppercase tracking-wide mb-4 border-b border-gray-200 pb-2">Data Dasar Unit</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="md:col-span-1"><label className="block text-xs font-bold text-gray-600 mb-1.5">Nama Perusahaan</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-md text-[14px]" value={editFormData.company.name} onChange={(e) => handleCompanyChange('name', e.target.value)} /></div>
-                        <div className="md:col-span-1"><label className="block text-xs font-bold text-gray-600 mb-1.5">Sektor Industri</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-md text-[14px]" value={editFormData.company.sector || ''} onChange={(e) => handleCompanyChange('sector', e.target.value)} /></div>
-                        <div className="md:col-span-1"><label className="block text-xs font-bold text-gray-600 mb-1.5">Kategori Izin</label><select className="w-full px-4 py-2 border border-gray-300 rounded-md text-[14px]" value={editFormData.company.category} onChange={(e) => handleCompanyChange('category', e.target.value)}><option value="PPKH">PPKH</option><option value="PKTMKH">PKTMKH</option></select></div>
+                  <div className="p-10 space-y-10 bg-white overflow-y-auto max-h-[650px]">
+                    <section className="bg-gray-50/50 p-8 rounded-3xl border border-gray-100">
+                      <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6 border-b pb-4">Identitas Dasar Perusahaan</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Nama Unit / Perusahaan</label><input type="text" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-green-600 font-bold" value={editFormData.company.name} onChange={(e) => handleCompanyChange('name', e.target.value)} /></div>
+                        <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Sektor Industri</label><input type="text" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-green-600 font-bold" value={editFormData.company.sector || ''} onChange={(e) => handleCompanyChange('sector', e.target.value)} /></div>
+                        <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Kategori Perizinan</label><select className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-green-600 font-black" value={editFormData.company.category} onChange={(e) => handleCompanyChange('category', e.target.value)}><option value="PPKH">PPKH</option><option value="PKTMKH">PKTMKH</option></select></div>
                       </div>
                     </section>
 
                     <section>
-                      <h4 className="text-[13px] font-bold text-gray-500 uppercase tracking-wide mb-4 border-b border-gray-200 pb-2">Rincian Kewajiban Penanaman</h4>
+                      <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6 px-1">Manajemen Rincian Kewajiban Penanaman</h4>
                       {editFormData.tasks.map((task, index) => (
-                        <div key={task.id} className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                             <div className="md:col-span-2"><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">No. SK Penetapan</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-md" value={task.sk_lokasi} onChange={(e) => handleTaskChange(index, 'sk_lokasi', e.target.value)} /></div>
-                             <div><label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">Luas SK (Ha)</label><input type="number" step="any" className="w-full px-4 py-2 border border-gray-300 rounded-md" value={task.luas || ''} onChange={(e) => handleTaskChange(index, 'luas', e.target.value)} /></div>
+                        <div key={task.id} className="bg-white border-2 border-gray-100 rounded-3xl p-8 mb-8 shadow-sm relative overflow-hidden">
+                          <div className="absolute top-0 left-0 w-2 h-full bg-green-700"></div>
+                          {editFormData.tasks.length > 1 && (
+                            <button onClick={() => removeTaskBlock(index)} className="absolute top-6 right-6 text-red-400 hover:text-red-600 bg-white rounded-full p-2 shadow-sm border border-gray-200 transition-colors" title="Hapus Kewajiban Ini"><X className="w-5 h-5" /></button>
+                          )}
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-10 pr-10">
+                             <div className="lg:col-span-1">
+                               <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Jenis Kewajiban</label>
+                               <select className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-green-600 font-bold" value={task.task} onChange={(e) => handleTaskChange(index, 'task', e.target.value)}>
+                                 <option value="Rehabilitasi DAS">Rehabilitasi DAS</option>
+                                 <option value="Reklamasi Hutan">Reklamasi Hutan</option>
+                                 <option value="Reboisasi Areal Pengganti">Reboisasi Pengganti</option>
+                               </select>
+                             </div>
+                             <div className="lg:col-span-1"><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">No. SK Penetapan</label><input type="text" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl font-mono font-bold shadow-sm focus:ring-2 focus:ring-green-600" value={task.sk_lokasi} onChange={(e) => handleTaskChange(index, 'sk_lokasi', e.target.value)} placeholder="No. SK" /></div>
+                             <div className="lg:col-span-1"><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Lokasi Penanaman</label><input type="text" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl font-bold shadow-sm focus:ring-2 focus:ring-green-600" value={task.lokasi || ''} onChange={(e) => handleTaskChange(index, 'lokasi', e.target.value)} placeholder="Nama Hutan/Desa" /></div>
+                             <div className="lg:col-span-1"><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Total Luas SK (Ha)</label><input type="number" step="any" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl font-black text-green-700 text-lg shadow-sm focus:ring-2 focus:ring-green-600" value={task.luas || ''} onChange={(e) => handleTaskChange(index, 'luas', e.target.value)} placeholder="0.00" /></div>
+                             <div className="lg:col-span-1">
+                               <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Sanksi Admin</label>
+                               <select className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-green-600 font-black" value={task.status || 'Tertib'} onChange={(e) => handleTaskChange(index, 'status', e.target.value)}>
+                                 <option value="Tertib" className="text-green-700">TERTIB</option>
+                                 <option value="SP1" className="text-yellow-700">SP1</option>
+                                 <option value="SP2" className="text-orange-700">SP2</option>
+                                 <option value="SP3" className="text-red-700">SP3</option>
+                               </select>
+                             </div>
                           </div>
                           
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                             <div className="bg-white p-5 rounded-lg border border-gray-200">
-                               <label className="text-[12px] font-bold text-gray-800 uppercase mb-4 block">Riwayat RKP</label>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                             <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 shadow-sm">
+                               <label className="text-[11px] font-black text-blue-800 uppercase mb-4 block border-b pb-3 tracking-widest">RIWAYAT RKP</label>
                                {(task.riwayat_rkp || []).map((r, hi) => (
-                                 <div key={hi} className="flex gap-2 mb-2">
-                                    <input type="number" className="w-20 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_rkp', hi, 'tahun', e.target.value)} />
-                                    <input type="number" className="flex-1 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_rkp', hi, 'luas', e.target.value)} />
-                                    <button onClick={() => removeHistory(index, 'riwayat_rkp', hi)} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5"/></button>
+                                 <div key={hi} className="flex gap-2 mb-3 items-center">
+                                    <input type="number" className="w-20 px-3 py-2 border border-gray-200 rounded-xl font-bold text-xs" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_rkp', hi, 'tahun', e.target.value)} placeholder="Thn" />
+                                    <input type="number" className="flex-1 px-3 py-2 border border-gray-200 rounded-xl font-black text-blue-700 text-xs" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_rkp', hi, 'luas', e.target.value)} placeholder="Luas" />
+                                    <button onClick={() => removeHistory(index, 'riwayat_rkp', hi)} className="text-red-300 hover:text-red-600 transition-colors p-1"><XSquare className="w-5 h-5"/></button>
                                  </div>
                                ))}
-                               <button type="button" onClick={() => addHistory(index, 'riwayat_rkp')} className="text-[11px] text-blue-600 font-bold hover:underline">+ Tambah Tahun</button>
+                               <button type="button" onClick={() => addHistory(index, 'riwayat_rkp')} className="w-full mt-3 py-2 border-2 border-dashed border-blue-200 text-[10px] text-blue-600 font-black rounded-xl hover:bg-blue-100 transition-all uppercase tracking-widest">+ TAHUN RKP</button>
                              </div>
-                             <div className="bg-white p-5 rounded-lg border border-gray-200">
-                               <label className="text-[12px] font-bold text-gray-800 uppercase mb-4 block">Realisasi Tanam</label>
+                             
+                             <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 shadow-sm">
+                               <label className="text-[11px] font-black text-green-800 uppercase mb-4 block border-b pb-3 tracking-widest">REALISASI TANAM</label>
                                {(task.riwayat_tanam || []).map((r, hi) => (
-                                 <div key={hi} className="flex gap-2 mb-2 items-center">
-                                    <input type="number" placeholder="Thn" className="w-16 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'tahun', e.target.value)} />
-                                    <input type="number" placeholder="Luas" className="w-16 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'luas', e.target.value)} />
-                                    <select className="flex-1 px-1 py-1 border border-gray-300 rounded text-[11px] font-semibold" value={r.status || 'P0'} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'status', e.target.value)}>
+                                 <div key={hi} className="flex gap-2 mb-3 items-center">
+                                    <input type="number" placeholder="Thn" className="w-16 px-3 py-2 border border-gray-200 rounded-xl font-bold text-xs" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'tahun', e.target.value)} />
+                                    <input type="number" placeholder="Luas" className="w-16 px-3 py-2 border border-gray-200 rounded-xl font-black text-green-700 text-xs" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'luas', e.target.value)} />
+                                    <select className="flex-1 px-2 py-2 border border-gray-200 rounded-xl text-xs font-black text-gray-700" value={r.status || 'P0'} onChange={(e) => updateHistory(index, 'riwayat_tanam', hi, 'status', e.target.value)}>
                                        <option value="P0">P0</option>
                                        <option value="P1">P1</option>
                                        <option value="P2">P2</option>
                                     </select>
-                                    <button onClick={() => removeHistory(index, 'riwayat_tanam', hi)} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5"/></button>
+                                    <button onClick={() => removeHistory(index, 'riwayat_tanam', hi)} className="text-red-300 hover:text-red-600 transition-colors p-1"><XSquare className="w-5 h-5"/></button>
                                  </div>
                                ))}
-                               <button type="button" onClick={() => addHistory(index, 'riwayat_tanam')} className="text-[11px] text-green-600 font-bold hover:underline">+ Tambah Tahun</button>
+                               <button type="button" onClick={() => addHistory(index, 'riwayat_tanam')} className="w-full mt-3 py-2 border-2 border-dashed border-green-200 text-[10px] text-green-600 font-black rounded-xl hover:bg-green-100 transition-all uppercase tracking-widest">+ TAHUN TANAM</button>
                              </div>
-                             <div className="bg-white p-5 rounded-lg border border-gray-200">
-                               <label className="text-[12px] font-bold text-gray-800 uppercase mb-4 block">Serah Terima BAST</label>
+                             
+                             <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 shadow-sm">
+                               <label className="text-[11px] font-black text-orange-800 uppercase mb-4 block border-b pb-3 tracking-widest">SERAH TERIMA BAST</label>
                                {(task.riwayat_serah_terima || []).map((r, hi) => (
-                                 <div key={hi} className="flex gap-2 mb-2">
-                                    <input type="number" className="w-20 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_serah_terima', hi, 'tahun', e.target.value)} placeholder="Thn" />
-                                    <input type="number" className="flex-1 px-2 py-1 border border-gray-300 rounded text-[12px]" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_serah_terima', hi, 'luas', e.target.value)} placeholder="Luas" />
-                                    <button onClick={() => removeHistory(index, 'riwayat_serah_terima', hi)} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5"/></button>
+                                 <div key={hi} className="flex gap-2 mb-3 items-center">
+                                    <input type="number" className="w-20 px-3 py-2 border border-gray-200 rounded-xl font-bold text-xs" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_serah_terima', hi, 'tahun', e.target.value)} placeholder="Thn" />
+                                    <input type="number" className="flex-1 px-3 py-2 border border-gray-200 rounded-xl font-black text-orange-700 text-xs" value={r.luas} onChange={(e) => updateHistory(index, 'riwayat_serah_terima', hi, 'luas', e.target.value)} placeholder="Luas" />
+                                    <button onClick={() => removeHistory(index, 'riwayat_serah_terima', hi)} className="text-red-300 hover:text-red-600 transition-colors p-1"><XSquare className="w-5 h-5"/></button>
                                  </div>
                                ))}
-                               <button type="button" onClick={() => addHistory(index, 'riwayat_serah_terima')} className="text-[11px] text-orange-600 font-bold hover:underline">+ Tambah Tahun</button>
+                               <button type="button" onClick={() => addHistory(index, 'riwayat_serah_terima')} className="w-full mt-3 py-2 border-2 border-dashed border-orange-200 text-[10px] text-orange-600 font-black rounded-xl hover:bg-orange-100 transition-all uppercase tracking-widest">+ TAHUN BAST</button>
                              </div>
                           </div>
                         </div>
                       ))}
-                      <button type="button" onClick={handleAddTaskBlock} className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-md font-bold hover:bg-gray-50 transition-colors">+ Tambah Blok Kewajiban (SK Lain)</button>
+                      <button type="button" onClick={handleAddTaskBlock} className="w-full py-5 border-2 border-dashed border-gray-200 text-gray-400 rounded-3xl font-black hover:bg-gray-50 hover:text-green-700 hover:border-green-300 transition-all uppercase tracking-[0.2em] text-xs">+ TAMBAH BLOK SK BARU</button>
                     </section>
                   </div>
 
-                  <div className="p-6 md:p-8 border-t border-gray-200 bg-gray-50 flex justify-end gap-4 rounded-b-lg">
-                    <button type="button" onClick={() => { setSelectedCompany(null); setEditFormData(null); }} className="px-6 py-2 bg-white border border-gray-300 rounded-md font-bold text-gray-600">Batal</button>
-                    <button type="button" onClick={handleSaveChanges} className="px-8 py-2 bg-green-700 text-white font-bold rounded-md shadow-md flex items-center gap-2"><Save className="w-4 h-4" /> Simpan Database Bersama</button>
+                  <div className="p-10 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-5 rounded-b-[2rem]">
+                    <button type="button" onClick={() => { setSelectedCompany(null); setEditFormData(null); }} className="px-10 py-4 bg-white border border-gray-200 rounded-2xl font-black text-gray-500 transition-all hover:bg-gray-100 uppercase tracking-widest text-xs">BATAL</button>
+                    <button type="button" onClick={handleSaveChanges} className="px-12 py-4 bg-green-700 hover:bg-green-800 text-white font-black rounded-2xl shadow-2xl flex items-center gap-3 transition-all transform active:scale-95 uppercase tracking-[0.1em] text-xs">
+                        <Save className="w-5 h-5" /> SIMPAN KE DATABASE
+                    </button>
                   </div>
                 </div>
               )}
