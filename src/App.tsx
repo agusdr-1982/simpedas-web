@@ -842,7 +842,7 @@ export default function App() {
                   <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countReklamasi} UNIT AKTIF</p>
                 </div>
                 <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-blue-500">
-                  <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Reboisasi Pengganti</p>
+                  <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Reboisasi Areal Pengganti</p>
                   <p className="text-4xl font-black text-blue-600">{areaStats.totalReboisasi.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
                   <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countReboisasi} UNIT AKTIF</p>
                 </div>
@@ -1292,7 +1292,7 @@ export default function App() {
                                <select className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-green-600 font-bold" value={task.task} onChange={(e) => handleTaskChange(index, 'task', e.target.value)}>
                                  <option value="Rehabilitasi DAS">Rehabilitasi DAS</option>
                                  <option value="Reklamasi Hutan">Reklamasi Hutan</option>
-                                 <option value="Reboisasi Areal Pengganti">Reboisasi Pengganti</option>
+                                 <option value="Reboisasi Areal Pengganti">Reboisasi Areal Pengganti</option>
                                </select>
                              </div>
                              <div className="lg:col-span-1"><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">No. SK Penetapan</label><input type="text" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl font-mono font-bold shadow-sm focus:ring-2 focus:ring-green-600" value={task.sk_lokasi} onChange={(e) => handleTaskChange(index, 'sk_lokasi', e.target.value)} placeholder="No. SK" /></div>
