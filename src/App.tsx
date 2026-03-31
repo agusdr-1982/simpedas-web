@@ -87,6 +87,10 @@ export default function App() {
   const [selectedPlantStatus, setSelectedPlantStatus] = useState(null);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
+  // STATE BARU: Laporan Eksekutif Pimpinan
+  const [execCategory, setExecCategory] = useState('PPKH');
+  const [execTask, setExecTask] = useState('Rehabilitasi DAS');
+
   // ==========================================
   // EFFECT: AUTENTIKASI FIREBASE
   // ==========================================
@@ -270,7 +274,7 @@ export default function App() {
     const newId = Date.now();
     const newCategory = filterCategory === 'PPKH' || filterCategory === 'PKTMKH' ? filterCategory : 'PPKH';
     const newCompany = { id: newId, name: '', category: newCategory, sector: '', status: 'Tertib', score: 0 };
-    const newTask = { id: newId + 1, task: newCategory === 'PPKH' ? 'Rehabilitasi DAS' : 'Reboisasi Areal Pengganti', sk_lokasi: '', lokasi: '', luas: '', status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [], riwayat_tanam: [], riwayat_serah_terima: [] };
+    const newTask = { id: newId + 1, task: newCategory === 'PPKH' ? 'Rehabilitasi DAS' : 'Reboisasi Areal Pengganti', sk_lokasi: '', tanggal_sk: '', lokasi: '', luas: '', status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [], riwayat_tanam: [], riwayat_serah_terima: [] };
     setSelectedCompany(newCompany);
     setEditFormData({ isNew: true, company: newCompany, tasks: [newTask] });
     setShowSaveSuccess(false);
@@ -290,7 +294,7 @@ export default function App() {
   };
 
   const handleAddTaskBlock = () => {
-    setEditFormData((prev) => ({ ...prev, tasks: [ ...prev.tasks, { id: Date.now(), task: 'Rehabilitasi DAS', sk_lokasi: '', lokasi: '', luas: '', status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [], riwayat_tanam: [], riwayat_serah_terima: [] } ] }));
+    setEditFormData((prev) => ({ ...prev, tasks: [ ...prev.tasks, { id: Date.now(), task: 'Rehabilitasi DAS', sk_lokasi: '', tanggal_sk: '', lokasi: '', luas: '', status: 'Tertib', file_sk_name: '', file_bast_name: '', riwayat_rkp: [], riwayat_tanam: [], riwayat_serah_terima: [] } ] }));
   };
 
   const removeTaskBlock = (taskIndex) => {
@@ -468,33 +472,167 @@ export default function App() {
   }, [filteredCompanies, obligationsData]);
 
   const smartAlerts = useMemo(() => {
-    const alerts = []; const currentYear = new Date().getFullYear();
+    const alerts = []; 
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0 (Januari) sampai 11 (Desember)
+
     companiesData.forEach(c => {
       const tasks = obligationsData[c.id] || [];
       tasks.forEach(task => {
-        if (task.task === 'Rehabilitasi DAS') {
-          const currentStatus = task.status || c.status;
-          const tanamYears = (task.riwayat_tanam || []).map(r => Number(r.tahun) || 0);
-          const latestTanamYear = tanamYears.length > 0 ? Math.max(...tanamYears) : 0;
-          if (currentStatus === 'Tertib') {
-             if (latestTanamYear === 0) { alerts.push({ id: `${c.id}-${task.id}-sp1-new`, company: c.name, type: 'SP1', message: `Belum ada realisasi tanam (P0) sejak SK diterbitkan. Evaluasi semester berpotensi SP1.` }); } 
-             else if (latestTanamYear < currentYear - 1) { alerts.push({ id: `${c.id}-${task.id}-sp1`, company: c.name, type: 'SP1', message: `Tidak ada progres tanam baru sejak ${latestTanamYear}. Evaluasi semester berpotensi SP1.` }); }
-          } else if (currentStatus === 'SP1' && latestTanamYear < currentYear - 1) { alerts.push({ id: `${c.id}-${task.id}-sp2`, company: c.name, type: 'SP2', message: `Masa peringatan SP1 habis tanpa progres tanam baru. Segera tingkatkan ke SP2.` });
-          } else if (currentStatus === 'SP2' && latestTanamYear < currentYear - 1) { alerts.push({ id: `${c.id}-${task.id}-sp3`, company: c.name, type: 'SP3', message: `PERINGATAN KERAS! Status SP2 tanpa progres. Rekomendasi naik ke SP3.` }); }
+        const luasSK = Number(task.luas) || 0;
+        if (luasSK <= 0) return; // Lewati jika luas SK belum diisi
+
+        const totals = getTaskTotals(task);
+        if (totals.luas_serah_terima >= luasSK) return; // Lewati jika sudah Serah Terima 100% (Selesai/Aman)
+
+        const hasRKP = totals.luas_rkp > 0;
+        const hasTanam = totals.realisasi_tanam > 0;
+
+        if (task.tanggal_sk) {
+            const skDate = new Date(task.tanggal_sk);
+            const diffTime = today.getTime() - skDate.getTime();
+            const daysSinceSK = Math.floor(diffTime / (1000 * 60 * 60 * 24)); // Menghitung selisih hari
+
+            let generatedSP = null;
+            let message = "";
+
+            // ATURAN 1: Belum RKP (Tenggat 30 hari)
+            if (!hasRKP) {
+                if (daysSinceSK > 90) { generatedSP = 'SP3'; message = `Lewat 90 hari sejak SK terbit dan belum menyusun RKP.`; }
+                else if (daysSinceSK > 60) { generatedSP = 'SP2'; message = `Lewat 60 hari sejak SK terbit dan belum menyusun RKP.`; }
+                else if (daysSinceSK > 30) { generatedSP = 'SP1'; message = `Lewat 30 hari sejak SK terbit dan belum menyusun RKP.`; }
+            }
+            // ATURAN 2: Sudah RKP, Belum Tanam 
+            // (Asumsi 30 hari nyusun RKP + 30 hari batas tanam = 60 hari dari SK)
+            else if (hasRKP && !hasTanam) {
+                if (daysSinceSK > 120) { generatedSP = 'SP3'; message = `Lewat 90 hari dari batas toleransi RKP tanpa realisasi tanam.`; }
+                else if (daysSinceSK > 90) { generatedSP = 'SP2'; message = `Lewat 60 hari dari batas toleransi RKP tanpa realisasi tanam.`; }
+                else if (daysSinceSK > 60) { generatedSP = 'SP1'; message = `Lewat 30 hari dari batas toleransi RKP tanpa realisasi tanam.`; }
+            }
+            // ATURAN 3: Sudah RKP, Sudah Tanam, Tapi Progres Stagnan / Tidak Bertambah
+            else if (hasRKP && hasTanam && totals.realisasi_tanam < luasSK) {
+                const tanamYears = (task.riwayat_tanam || []).map(r => Number(r.tahun) || 0);
+                const latestTanamYear = tanamYears.length > 0 ? Math.max(...tanamYears) : 0;
+                const yearDiff = currentYear - latestTanamYear;
+
+                // Pendekatan stagnan 6 bulan karena data menggunakan 'Tahun':
+                // Jika tahun terakhir tanam adalah 2 tahun lalu -> Lanjut SP3
+                if (yearDiff >= 2) {
+                   generatedSP = 'SP3'; message = `Stagnan! Tidak ada laporan progres penanaman selama > 1 tahun.`;
+                } 
+                // Jika tahun lalu menanam, tapi tahun ini belum, dan sekarang sudah lewat bulan September (Bulan ke-9) -> Lanjut SP2
+                else if (yearDiff === 1 && currentMonth >= 8) { 
+                   generatedSP = 'SP2'; message = `Progres penanaman stagnan. Melewati toleransi teguran SP1.`;
+                } 
+                // Jika tahun lalu menanam, tapi tahun ini belum, dan sekarang sudah lewat bulan Juni (6 bulan stagnan) -> Masuk SP1
+                else if (yearDiff === 1 && currentMonth >= 5) { 
+                   generatedSP = 'SP1'; message = `Progres penanaman stagnan selama > 6 bulan tanpa laporan penambahan.`;
+                }
+            }
+
+            if (generatedSP) {
+               alerts.push({ id: `${c.id}-${task.id}-${generatedSP}`, company: c.name, type: generatedSP, message: message });
+            }
+        } else {
+            // FALLBACK: Jika Admin belum mengisi Tanggal SK, tebak pakai Tahun saja (EWS Versi Ringan)
+            let skYear = currentYear;
+            const yearMatch = task.sk_lokasi?.match(/(20\d{2})/);
+            if (yearMatch) skYear = parseInt(yearMatch[1]);
+            else if (task.riwayat_rkp && task.riwayat_rkp.length > 0) skYear = Math.min(...task.riwayat_rkp.map(r => Number(r.tahun)));
+
+            if (!hasRKP && (currentYear - skYear >= 1)) {
+               alerts.push({ id: `${c.id}-${task.id}-sp1`, company: c.name, type: 'SP1', message: `Belum RKP sejak tahun SK (${skYear}). Mohon isi Tanggal SK untuk kalkulasi akurat.` });
+            } else if (hasRKP && !hasTanam && (currentYear - skYear >= 1)) {
+               alerts.push({ id: `${c.id}-${task.id}-sp1`, company: c.name, type: 'SP1', message: `Belum ada tanam sejak tahun SK (${skYear}). Mohon isi Tanggal SK.` });
+            }
         }
       });
     });
     return alerts;
   }, [companiesData, obligationsData]);
 
+  // LOGIKA BARU: Data Laporan Eksekutif Pimpinan
+  const executiveReportData = useMemo(() => {
+    let metrics = {
+      st_full: { count: 0, areaSK: 0 },
+      st_partial: { count: 0, areaSK: 0 },
+      tanam_full: { count: 0, areaSK: 0 },
+      tanam_partial: { count: 0, areaSK: 0 },
+      belum_tanam_telat: { count: 0, areaSK: 0 }
+    };
+    const currentYear = new Date().getFullYear();
+
+    companiesData.forEach(c => {
+      if (c.category !== execCategory) return;
+      const tasks = obligationsData[c.id] || [];
+      
+      tasks.forEach(t => {
+        if (t.task !== execTask) return;
+        const luasSK = Number(t.luas) || 0;
+        if (luasSK <= 0) return;
+
+        const totals = getTaskTotals(t);
+        const luasTanam = totals.realisasi_tanam;
+        const luasST = totals.luas_serah_terima;
+
+        // Mencari Tahun SK secara akurat (Prioritas: Tanggal SK -> Teks SK -> RKP)
+        let skYear = currentYear;
+        let isTelat = false;
+        
+        if (t.tanggal_sk) {
+          const skDate = new Date(t.tanggal_sk);
+          const oneYearAgo = new Date();
+          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+          isTelat = skDate <= oneYearAgo;
+        } else {
+          const yearMatch = t.sk_lokasi?.match(/(20\d{2})/);
+          if (yearMatch) {
+            skYear = parseInt(yearMatch[1]);
+          } else if (t.riwayat_rkp && t.riwayat_rkp.length > 0) {
+            skYear = Math.min(...t.riwayat_rkp.map(r => Number(r.tahun)));
+          }
+          isTelat = (currentYear - skYear) >= 1;
+        }
+
+        // 1 & 2: Serah Terima
+        if (luasST >= luasSK) { metrics.st_full.count++; metrics.st_full.areaSK += luasSK; }
+        else if (luasST > 0) { metrics.st_partial.count++; metrics.st_partial.areaSK += luasSK; }
+
+        // 3 & 4: Penanaman
+        if (luasTanam >= luasSK) { metrics.tanam_full.count++; metrics.tanam_full.areaSK += luasSK; }
+        else if (luasTanam > 0) { metrics.tanam_partial.count++; metrics.tanam_partial.areaSK += luasSK; }
+
+        // 5: Belum Tanam Telat (> 1 thn)
+        if (luasTanam === 0 && isTelat) {
+          metrics.belum_tanam_telat.count++; metrics.belum_tanam_telat.areaSK += luasSK;
+        }
+      });
+    });
+    return metrics;
+  }, [companiesData, obligationsData, execCategory, execTask]);
+
   const dashboardDetailCompanies = useMemo(() => {
     if (!selectedDashboardStatus) return [];
     return companiesData.filter((c) => {
       const matchesCat = dashboardCategory === 'Semua' || c.category === dashboardCategory;
-      const matchesStat = selectedDashboardStatus === 'Semua' ? true : c.status === selectedDashboardStatus;
-      return matchesCat && matchesStat;
+      if (!matchesCat) return false;
+
+      // Cari status terburuk dari rincian kewajibannya (sama seperti logika pada Kartu)
+      let derivedStatus = c.status || 'Tertib';
+      const tasks = obligationsData[c.id] || [];
+      if (tasks.length > 0) {
+        const statuses = tasks.map(t => t.status || 'Tertib');
+        if (statuses.includes('SP3')) derivedStatus = 'SP3';
+        else if (statuses.includes('SP2')) derivedStatus = 'SP2';
+        else if (statuses.includes('SP1')) derivedStatus = 'SP1';
+        else derivedStatus = 'Tertib';
+      }
+
+      const matchesStat = selectedDashboardStatus === 'Semua' ? true : derivedStatus === selectedDashboardStatus;
+      return matchesStat;
     });
-  }, [companiesData, dashboardCategory, selectedDashboardStatus]);
+  }, [companiesData, dashboardCategory, selectedDashboardStatus, obligationsData]);
 
   const dashboardPlantStatusCompanies = useMemo(() => {
     if (!selectedPlantStatus) return [];
@@ -589,6 +727,106 @@ export default function App() {
     printReport(title, subtitle, headers, rows);
   };
 
+  const printPlantStatus = () => {
+    const title = "LAPORAN RINCIAN STATUS PEMELIHARAAN TANAMAN"; 
+    const statusName = selectedPlantStatus === 'P0' ? 'Tanaman Baru (P0)' : (selectedPlantStatus === 'P1' ? 'Pemeliharaan 1 (P1)' : 'Pemeliharaan 2+ (P2)'); 
+    const subtitle = `Filter Status: ${statusName} | Total Unit: ${dashboardPlantStatusCompanies.length}`;
+    const headers = ["No", "Nama Perusahaan", "Kategori", "No. SK Penetapan", "Luas SK (Ha)", "Tanam Total (Ha)", `Luas ${selectedPlantStatus} (Ha)`, "Status Kepatuhan"];
+    let rows = []; let counter = 1;
+    dashboardPlantStatusCompanies.forEach(c => { 
+      const tasks = obligationsData[c.id] || []; 
+      tasks.forEach(task => { 
+        let specificArea = 0; 
+        if (task.riwayat_tanam) { 
+          task.riwayat_tanam.forEach(r => { 
+            const s = r.status || 'P0'; 
+            if (s === selectedPlantStatus) specificArea += (Number(r.luas) || 0); 
+          }); 
+        } 
+        if (specificArea > 0) { 
+          const totals = getTaskTotals(task); 
+          const luasSK = Number(task.luas) || 0; 
+          rows.push([ counter++, c.name, c.category, task.sk_lokasi || '-', luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), specificArea.toLocaleString('id-ID'), task.status || c.status ]); 
+        } 
+      }); 
+    });
+    printReport(title, subtitle, headers, rows);
+  };
+
+  const printExecutiveReport = () => {
+    const title = "LAPORAN EKSEKUTIF PEMENUHAN KEWAJIBAN";
+    const subtitle = `Kategori Izin: ${execCategory} | Jenis Kewajiban: ${execTask}`;
+    const printWindow = window.open('', '_blank');
+    const currentDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            @page { size: portrait; margin: 20mm; }
+            body { font-family: 'Tahoma', sans-serif; font-size: 12pt; padding: 0 20px; color: #000; line-height: 1.6; }
+            .kop-surat { display: flex; align-items: center; border-bottom: 4px solid #000; padding-bottom: 15px; margin-bottom: 25px; }
+            .kop-logo { width: 85px; height: auto; margin-right: 25px; }
+            .kop-text { flex: 1; text-align: center; padding-right: 110px; }
+            .kop-text h2 { margin: 0 0 5px 0; font-size: 15pt; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
+            .kop-text p { margin: 0; font-size: 12pt; }
+            .doc-title { text-align: center; margin-bottom: 30px; }
+            .doc-title h1 { margin: 0 0 5px 0; font-size: 14pt; text-transform: uppercase; text-decoration: underline; }
+            .doc-title p { margin: 0; font-size: 12pt; color: #333; }
+            .content-list { margin-bottom: 40px; }
+            .content-list p { margin-bottom: 15px; text-align: justify; }
+            .highlight { font-weight: bold; }
+            .footer { margin-top: 60px; display: flex; justify-content: flex-end; }
+            .ttd-box { text-align: center; width: 280px; }
+            .ttd-box p { margin: 0; font-size: 12pt; }
+          </style>
+        </head>
+        <body>
+          <div class="kop-surat">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg/200px-Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg.png" class="kop-logo" alt="Logo Kementerian Kehutanan" />
+            <div class="kop-text">
+              <h2>KEMENTERIAN KEHUTANAN</h2>
+              <h2>BPDAS KAHAYAN</h2>
+              <p>Sistem Pengawasan Pemenuhan Kewajiban PPKH dan PKTMKH</p>
+            </div>
+          </div>
+          
+          <div class="doc-title">
+            <h1>${title}</h1>
+            <p>${subtitle}</p>
+          </div>
+
+          <div class="content-list">
+            <p>Berdasarkan data Sistem Monitoring BPDAS Kahayan pada tanggal ${currentDate}, bersama ini dilaporkan rincian data progres pemenuhan kewajiban <strong>${execTask}</strong> untuk pemegang izin <strong>${execCategory}</strong> sebagai berikut:</p>
+            
+            <ol>
+              <li>Sebanyak <span class="highlight">${executiveReportData.st_full.count} ${execCategory}</span> [seluas <span class="highlight">${executiveReportData.st_full.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan serah terima ${execTask.toLowerCase()} seluas 1:1 dari luas ${execCategory}.</li>
+              <li>Sebanyak <span class="highlight">${executiveReportData.st_partial.count} ${execCategory}</span> [seluas <span class="highlight">${executiveReportData.st_partial.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan serah terima ${execTask.toLowerCase()} secara parsial (sebagian) dari luas ${execCategory}.</li>
+              <li>Sebanyak <span class="highlight">${executiveReportData.tanam_full.count} ${execCategory}</span> [seluas <span class="highlight">${executiveReportData.tanam_full.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan penanaman ${execTask.toLowerCase()} seluas 1:1 dari luas ${execCategory}.</li>
+              <li>Sebanyak <span class="highlight">${executiveReportData.tanam_partial.count} ${execCategory}</span> [seluas <span class="highlight">${executiveReportData.tanam_partial.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan penanaman ${execTask.toLowerCase()} sebagian dari luas ${execCategory}.</li>
+              <li>Sebanyak <span class="highlight">${executiveReportData.belum_tanam_telat.count} ${execCategory}</span> [seluas <span class="highlight">${executiveReportData.belum_tanam_telat.areaSK.toLocaleString('id-ID')} Ha</span>] belum melakukan penanaman ${execTask.toLowerCase()} sejak 1 (satu) tahun diterbitkannya SK penetapan lokasi.</li>
+            </ol>
+
+            <p>Demikian laporan data ini disusun untuk dapat dipergunakan sebagaimana mestinya.</p>
+          </div>
+
+          <div class="footer">
+            <div class="ttd-box">
+              <p style="text-align: left; margin-bottom: 80px;">Dicetak pada: ${currentDate}</p>
+              <p style="font-weight: bold;">( .................................................... )</p>
+              <p>NIP. ........................................</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    setTimeout(() => printWindow.print(), 500);
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Tertib': return 'bg-green-100 text-green-800 border-green-200'; case 'SP1': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
@@ -630,11 +868,18 @@ export default function App() {
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-white leading-tight tracking-tight mb-6 drop-shadow-lg">Sistem Monitoring dan Pengawasan Pemenuhan Kewajiban <br className="hidden lg:block"/><span className="text-green-400">Pemegang PPKH dan PKTMKH</span></h1>
           <p className="text-lg md:text-xl text-green-100 mb-12 tracking-wide font-medium max-w-3xl">Di Wilayah Kerja BPDAS Kahayan</p>
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-            <button onClick={() => setAuthView('login')} className="px-8 py-3.5 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg text-lg transition-all shadow-md flex items-center justify-center gap-2"><Lock className="w-5 h-5" /> Masuk Aplikasi</button>
-            <button onClick={() => setAuthView('register')} className="px-8 py-3.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/30 text-white font-bold rounded-lg text-lg transition-all flex items-center justify-center gap-2"><UserPlus className="w-5 h-5" /> Daftar Akun Baru</button>
+            <button onClick={() => setAuthView('login')} className="px-8 py-3.5 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg text-lg transition-all shadow-[0_0_20px_rgba(22,163,74,0.4)] hover:shadow-[0_0_30px_rgba(22,163,74,0.6)] flex items-center justify-center gap-2">
+              <Lock className="w-5 h-5" /> Masuk Aplikasi
+            </button>
+            <button onClick={() => setAuthView('register')} className="px-8 py-3.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/30 text-white font-bold rounded-lg text-lg transition-all flex items-center justify-center gap-2">
+              <User className="w-5 h-5" /> Daftar Akun Baru
+            </button>
           </div>
         </div>
-        <div className="absolute bottom-6 text-white/50 text-xs font-semibold tracking-widest uppercase">Kementerian Kehutanan RI</div>
+        
+        <div className="absolute bottom-6 text-white/50 text-xs font-semibold tracking-widest uppercase">
+          Kementerian Kehutanan RI
+        </div>
       </div>
     );
   }
@@ -850,7 +1095,10 @@ export default function App() {
 
               {/* 2. REKAPITULASI PROGRES PEMENUHAN KEWAJIBAN */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8">
-                <h3 className="text-lg font-black text-gray-900 mb-8 flex items-center gap-3"><PieChart className="w-6 h-6 text-blue-600" /> Rekapitulasi progres pemenuhan kewajiban pemegang PPKH dan PKTMKH</h3>
+                <h3 className="text-lg font-black text-gray-900 mb-8 flex items-center gap-3">
+                  <PieChart className="w-6 h-6 text-blue-600" /> 
+                  Rekapitulasi progres pemenuhan kewajiban pemegang {dashboardCategory === 'Semua' ? 'PPKH dan PKTMKH' : dashboardCategory}
+                </h3>
                 <div className="space-y-8">
                   <div>
                     <div className="flex justify-between text-xs font-black uppercase tracking-widest text-gray-500 mb-3">
@@ -893,10 +1141,11 @@ export default function App() {
                             const val = yearlyProgress.data.rkp[y] || 0;
                             const pct = yearlyProgress.maxRKP > 0 ? (val / yearlyProgress.maxRKP) * 100 : 0;
                             return (
-                               <div key={`rkp-${y}`} className="flex-1 flex flex-col items-center justify-end group relative">
-                                  <span className="text-[10px] font-black text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity mb-2">{val.toLocaleString('id-ID')}</span>
-                                  <div className="w-full bg-blue-100 rounded-t-md flex items-end justify-center" style={{height: '100%'}}>
-                                     <div className="w-full bg-blue-500 rounded-t-md transition-all duration-1000 hover:bg-blue-400" style={{height: `${pct}%`}}></div>
+                               <div key={`rkp-${y}`} className="flex-1 flex flex-col items-center justify-end group relative h-full pt-5">
+                                  <div className="w-full bg-blue-100 rounded-t-md flex-1 flex items-end justify-center relative">
+                                     <div className="w-full bg-blue-500 rounded-t-md transition-all duration-1000 hover:bg-blue-400 absolute bottom-0 flex justify-center" style={{height: `${pct}%`}}>
+                                        <span className={`absolute -top-5 text-[10px] font-black tracking-tight ${val > 0 ? 'text-blue-700' : 'text-gray-400'}`}>{val > 0 ? val.toLocaleString('id-ID') : '0'}</span>
+                                     </div>
                                   </div>
                                   <span className="text-[10px] font-bold text-gray-400 mt-3">{y}</span>
                                </div>
@@ -911,10 +1160,11 @@ export default function App() {
                             const val = yearlyProgress.data.tanam[y] || 0;
                             const pct = yearlyProgress.maxTanam > 0 ? (val / yearlyProgress.maxTanam) * 100 : 0;
                             return (
-                               <div key={`tnm-${y}`} className="flex-1 flex flex-col items-center justify-end group relative">
-                                  <span className="text-[10px] font-black text-green-600 opacity-0 group-hover:opacity-100 transition-opacity mb-2">{val.toLocaleString('id-ID')}</span>
-                                  <div className="w-full bg-green-100 rounded-t-md flex items-end justify-center" style={{height: '100%'}}>
-                                     <div className="w-full bg-green-500 rounded-t-md transition-all duration-1000 hover:bg-green-400" style={{height: `${pct}%`}}></div>
+                               <div key={`tnm-${y}`} className="flex-1 flex flex-col items-center justify-end group relative h-full pt-5">
+                                  <div className="w-full bg-green-100 rounded-t-md flex-1 flex items-end justify-center relative">
+                                     <div className="w-full bg-green-500 rounded-t-md transition-all duration-1000 hover:bg-green-400 absolute bottom-0 flex justify-center" style={{height: `${pct}%`}}>
+                                        <span className={`absolute -top-5 text-[10px] font-black tracking-tight ${val > 0 ? 'text-green-700' : 'text-gray-400'}`}>{val > 0 ? val.toLocaleString('id-ID') : '0'}</span>
+                                     </div>
                                   </div>
                                   <span className="text-[10px] font-bold text-gray-400 mt-3">{y}</span>
                                </div>
@@ -929,10 +1179,11 @@ export default function App() {
                             const val = yearlyProgress.data.st[y] || 0;
                             const pct = yearlyProgress.maxST > 0 ? (val / yearlyProgress.maxST) * 100 : 0;
                             return (
-                               <div key={`st-${y}`} className="flex-1 flex flex-col items-center justify-end group relative">
-                                  <span className="text-[10px] font-black text-orange-600 opacity-0 group-hover:opacity-100 transition-opacity mb-2">{val.toLocaleString('id-ID')}</span>
-                                  <div className="w-full bg-orange-100 rounded-t-md flex items-end justify-center" style={{height: '100%'}}>
-                                     <div className="w-full bg-orange-500 rounded-t-md transition-all duration-1000 hover:bg-orange-400" style={{height: `${pct}%`}}></div>
+                               <div key={`st-${y}`} className="flex-1 flex flex-col items-center justify-end group relative h-full pt-5">
+                                  <div className="w-full bg-orange-100 rounded-t-md flex-1 flex items-end justify-center relative">
+                                     <div className="w-full bg-orange-500 rounded-t-md transition-all duration-1000 hover:bg-orange-400 absolute bottom-0 flex justify-center" style={{height: `${pct}%`}}>
+                                        <span className={`absolute -top-5 text-[10px] font-black tracking-tight ${val > 0 ? 'text-orange-700' : 'text-gray-400'}`}>{val > 0 ? val.toLocaleString('id-ID') : '0'}</span>
+                                     </div>
                                   </div>
                                   <span className="text-[10px] font-bold text-gray-400 mt-3">{y}</span>
                                </div>
@@ -994,6 +1245,9 @@ export default function App() {
                           </h3>
                         </div>
                         <div className="flex items-center gap-3">
+                          <button onClick={printPlantStatus} className="px-4 py-2.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 font-bold rounded-lg text-[13px] transition-colors flex items-center gap-2 border border-rose-200 shadow-sm">
+                            <Printer className="w-4 h-4" /> Cetak PDF
+                          </button>
                           <button onClick={exportPlantStatusCSV} className="px-4 py-2.5 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:text-teal-800 font-bold rounded-lg text-[13px] transition-colors flex items-center gap-2 border border-teal-200 shadow-sm">
                             <Download className="w-4 h-4" /> Export CSV
                           </button>
@@ -1061,7 +1315,7 @@ export default function App() {
 
               {/* 5. STATUS PEMENUHAN KEWAJIBAN & EWS (DIGABUNG) */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8">
-                <h3 className="text-lg font-black text-gray-900 mb-2 flex items-center gap-3"><ShieldAlert className="w-6 h-6 text-rose-600" /> Status Kepatuhan & Peringatan Dini (Smart EWS)</h3>
+                <h3 className="text-lg font-black text-gray-900 mb-2 flex items-center gap-3"><ShieldAlert className="w-6 h-6 text-rose-600" /> Status Kepatuhan</h3>
                 <p className="text-[13px] text-gray-500 mb-8 italic">Klik pada kartu status untuk memfilter daftar perusahaan di bawahnya.</p>
                 
                 {/* Kartu Status Admin */}
@@ -1095,6 +1349,9 @@ export default function App() {
                         </h3>
                       </div>
                       <div className="flex items-center gap-3">
+                        <button onClick={printDashboardStatus} className="px-4 py-2.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 font-bold rounded-lg text-[13px] transition-colors flex items-center gap-2 border border-rose-200 shadow-sm">
+                          <Printer className="w-4 h-4" /> Cetak PDF
+                        </button>
                         <button onClick={exportDashboardCSV} className="px-4 py-2.5 bg-blue-600 text-white hover:bg-blue-700 font-bold rounded-lg text-[13px] transition-colors flex items-center gap-2 shadow-md">
                           <Download className="w-4 h-4" /> Export CSV
                         </button>
@@ -1162,42 +1419,72 @@ export default function App() {
                     </div>
                   </div>
                 )}
+              </div>
 
-                {/* Daftar Rincian EWS */}
-                <div className="px-1 border-t border-gray-100 pt-6">
-                  <h4 className="font-black text-gray-800 mb-6 text-base uppercase tracking-widest border-b border-gray-200 pb-3 flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-rose-600" />
-                    Rincian Peringatan Cerdas (Smart EWS) <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md text-xs">{smartAlerts.length} Peringatan</span>
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {smartAlerts.map(alert => (
-                      <div key={alert.id} className="bg-white p-5 rounded-xl border-l-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
-                           style={{ borderLeftColor: alert.type === 'SP3' ? '#ef4444' : (alert.type === 'SP2' ? '#f97316' : '#eab308') }}>
-                        <div>
-                          <div className="flex justify-between items-start mb-3">
-                            <span className="font-bold text-[14px] text-gray-900 truncate pr-2">{alert.company}</span>
-                            <span className={`text-[10px] font-black px-2 py-1 rounded-md border uppercase tracking-widest ${alert.type === 'SP3' ? 'bg-red-50 text-red-700 border-red-200' : (alert.type === 'SP2' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200')}`}>{alert.type}</span>
-                          </div>
-                          <p className="text-[13px] text-gray-600 leading-relaxed">{alert.message}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {smartAlerts.length === 0 && (
-                      <div className="col-span-full flex flex-col items-center justify-center p-10 bg-green-50 rounded-2xl border border-green-200 border-dashed">
-                        <CheckCircle className="w-12 h-12 text-green-500 mb-4 opacity-50" />
-                        <p className="text-lg font-black text-green-800 tracking-tight">Kondisi Terkendali</p>
-                        <p className="text-sm text-green-600 font-semibold mt-1">Semua unit perusahaan dalam batas aman. Tidak ada peringatan EWS.</p>
-                      </div>
-                    )}
+              {/* 6. MODUL LAPORAN EKSEKUTIF PIMPINAN */}
+              {dashboardCategory === 'PPKH' && (
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 animate-in slide-in-from-bottom-4 duration-500">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-gray-100 pb-4">
+                    <div>
+                      <h3 className="text-lg font-black text-gray-900 flex items-center gap-3">
+                        <FileText className="w-6 h-6 text-indigo-600" /> Laporan Eksekutif (Pimpinan) - Rehabilitasi DAS
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">Rangkuman otomatis khusus progres Rehabilitasi DAS untuk entitas PPKH.</p>
+                    </div>
+                    <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+                       <button onClick={printExecutiveReport} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[13px] shadow-md flex items-center gap-2 transition-all w-full md:w-auto justify-center whitespace-nowrap">
+                         <Printer className="w-4 h-4"/> Cetak PDF Laporan
+                       </button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4 bg-indigo-50/30 p-6 md:p-8 rounded-xl border border-indigo-100 shadow-inner">
+                    <p className="text-[14px] text-gray-700 leading-relaxed font-semibold">1. Sebanyak <span className="font-black text-indigo-700">{executiveReportData.st_full.count} {execCategory}</span> [seluas <span className="font-black text-indigo-700">{executiveReportData.st_full.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan serah terima {execTask.toLowerCase()} seluas 1:1 dari luas {execCategory}.</p>
+                    <p className="text-[14px] text-gray-700 leading-relaxed font-semibold">2. Sebanyak <span className="font-black text-indigo-700">{executiveReportData.st_partial.count} {execCategory}</span> [seluas <span className="font-black text-indigo-700">{executiveReportData.st_partial.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan serah terima {execTask.toLowerCase()} secara parsial (sebagian) dari luas {execCategory}.</p>
+                    <p className="text-[14px] text-gray-700 leading-relaxed font-semibold">3. Sebanyak <span className="font-black text-indigo-700">{executiveReportData.tanam_full.count} {execCategory}</span> [seluas <span className="font-black text-indigo-700">{executiveReportData.tanam_full.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan penanaman {execTask.toLowerCase()} seluas 1:1 dari luas {execCategory}.</p>
+                    <p className="text-[14px] text-gray-700 leading-relaxed font-semibold">4. Sebanyak <span className="font-black text-indigo-700">{executiveReportData.tanam_partial.count} {execCategory}</span> [seluas <span className="font-black text-indigo-700">{executiveReportData.tanam_partial.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan penanaman {execTask.toLowerCase()} sebagian dari luas {execCategory}.</p>
+                    <p className="text-[14px] text-gray-700 leading-relaxed font-semibold">5. Sebanyak <span className="font-black text-rose-600">{executiveReportData.belum_tanam_telat.count} {execCategory}</span> [seluas <span className="font-black text-rose-600">{executiveReportData.belum_tanam_telat.areaSK.toLocaleString('id-ID')} Ha</span>] belum melakukan penanaman {execTask.toLowerCase()} sejak 1 (satu) tahun diterbitkannya SK penetapan lokasi.</p>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
           {/* MANAJEMEN DATA */}
           {activeTab === 'companies' && (
             <div className="flex flex-col gap-6 pb-10 animate-in fade-in duration-500">
+              
+              {/* MODUL PERINGATAN CERDAS (SMART EWS) - DIPINDAHKAN KE MANAJEMEN DATA */}
+              <div className="bg-white rounded-3xl border border-gray-100 shadow-xl p-8">
+                <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-3">
+                  <Activity className="w-6 h-6 text-rose-600" />
+                  Rincian Peringatan Cerdas (Smart EWS) 
+                  <span className="bg-rose-100 text-rose-700 px-3 py-1 rounded-md text-xs">{smartAlerts.length} Peringatan</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {smartAlerts.map(alert => (
+                    <div key={alert.id} className="bg-gray-50 p-5 rounded-xl border-l-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                         style={{ borderLeftColor: alert.type === 'SP3' ? '#ef4444' : (alert.type === 'SP2' ? '#f97316' : '#eab308') }}>
+                      <div>
+                        <div className="flex justify-between items-start mb-3">
+                          <span className="font-bold text-[14px] text-gray-900 truncate pr-2">{alert.company}</span>
+                          <span className={`text-[10px] font-black px-2 py-1 rounded-md border uppercase tracking-widest ${alert.type === 'SP3' ? 'bg-red-50 text-red-700 border-red-200' : (alert.type === 'SP2' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200')}`}>{alert.type}</span>
+                        </div>
+                        <p className="text-[13px] text-gray-600 leading-relaxed">{alert.message}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {smartAlerts.length === 0 && (
+                    <div className="col-span-full flex flex-col items-center justify-center p-8 bg-green-50 rounded-2xl border border-green-200 border-dashed">
+                      <CheckCircle className="w-12 h-12 text-green-500 mb-3 opacity-50" />
+                      <p className="text-lg font-black text-green-800 tracking-tight">Kondisi Terkendali</p>
+                      <p className="text-sm text-green-600 font-semibold mt-1">Semua unit perusahaan dalam batas aman. Tidak ada peringatan EWS.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* TABEL MANAJEMEN DATA */}
               <div className={`bg-white rounded-3xl border border-gray-100 shadow-xl flex flex-col transition-all duration-700 ${selectedCompany ? 'h-[300px] shrink-0' : 'flex-1 min-h-[600px]'}`}>
                 <div className="p-6 border-b border-gray-100 flex flex-col xl:flex-row justify-between xl:items-center gap-6 bg-gray-50/50 rounded-t-3xl">
                   <div className="relative w-full sm:w-96">
@@ -1286,8 +1573,8 @@ export default function App() {
                             <button onClick={() => removeTaskBlock(index)} className="absolute top-6 right-6 text-red-400 hover:text-red-600 bg-white rounded-full p-2 shadow-sm border border-gray-200 transition-colors" title="Hapus Kewajiban Ini"><X className="w-5 h-5" /></button>
                           )}
                           
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-10 pr-10">
-                             <div className="lg:col-span-1">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 pr-10">
+                             <div>
                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Jenis Kewajiban</label>
                                <select className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-green-600 font-bold" value={task.task} onChange={(e) => handleTaskChange(index, 'task', e.target.value)}>
                                  <option value="Rehabilitasi DAS">Rehabilitasi DAS</option>
@@ -1295,10 +1582,12 @@ export default function App() {
                                  <option value="Reboisasi Areal Pengganti">Reboisasi Areal Pengganti</option>
                                </select>
                              </div>
-                             <div className="lg:col-span-1"><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">No. SK Penetapan</label><input type="text" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl font-mono font-bold shadow-sm focus:ring-2 focus:ring-green-600" value={task.sk_lokasi} onChange={(e) => handleTaskChange(index, 'sk_lokasi', e.target.value)} placeholder="No. SK" /></div>
-                             <div className="lg:col-span-1"><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Lokasi Penanaman</label><input type="text" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl font-bold shadow-sm focus:ring-2 focus:ring-green-600" value={task.lokasi || ''} onChange={(e) => handleTaskChange(index, 'lokasi', e.target.value)} placeholder="Nama Hutan/Desa" /></div>
-                             <div className="lg:col-span-1"><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Total Luas SK (Ha)</label><input type="number" step="any" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl font-black text-green-700 text-lg shadow-sm focus:ring-2 focus:ring-green-600" value={task.luas || ''} onChange={(e) => handleTaskChange(index, 'luas', e.target.value)} placeholder="0.00" /></div>
-                             <div className="lg:col-span-1">
+                             <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">No. SK Penetapan</label><input type="text" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl font-mono font-bold shadow-sm focus:ring-2 focus:ring-green-600" value={task.sk_lokasi} onChange={(e) => handleTaskChange(index, 'sk_lokasi', e.target.value)} placeholder="No. SK" /></div>
+                             <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Tanggal SK</label><input type="date" className="w-full px-4 py-3.5 border border-gray-200 rounded-2xl font-bold text-gray-700 shadow-sm focus:ring-2 focus:ring-green-600 text-[13px] uppercase" value={task.tanggal_sk || ''} onChange={(e) => handleTaskChange(index, 'tanggal_sk', e.target.value)} /></div>
+                             
+                             <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Lokasi Penanaman</label><input type="text" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl font-bold shadow-sm focus:ring-2 focus:ring-green-600" value={task.lokasi || ''} onChange={(e) => handleTaskChange(index, 'lokasi', e.target.value)} placeholder="Nama Hutan/Desa" /></div>
+                             <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Total Luas SK (Ha)</label><input type="number" step="any" className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl font-black text-green-700 text-lg shadow-sm focus:ring-2 focus:ring-green-600" value={task.luas || ''} onChange={(e) => handleTaskChange(index, 'luas', e.target.value)} placeholder="0.00" /></div>
+                             <div>
                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Sanksi Admin</label>
                                <select className="w-full px-5 py-3.5 border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-green-600 font-black" value={task.status || 'Tertib'} onChange={(e) => handleTaskChange(index, 'status', e.target.value)}>
                                  <option value="Tertib" className="text-green-700">TERTIB</option>
@@ -1306,6 +1595,46 @@ export default function App() {
                                  <option value="SP2" className="text-orange-700">SP2</option>
                                  <option value="SP3" className="text-red-700">SP3</option>
                                </select>
+                             </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                             {/* Upload Dokumen SK */}
+                             <div className="bg-gray-50 border border-gray-200 border-dashed rounded-2xl p-5 flex flex-col justify-center">
+                                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5"/> Scan SK Penetapan</label>
+                                <div className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
+                                   <div className="flex-1 flex items-center gap-2 justify-between">
+                                      <span className="text-[12px] font-semibold text-gray-700 truncate max-w-[150px] xl:max-w-[250px]" title={task.file_sk_name}>{task.file_sk_name || 'Belum ada file SK'}</span>
+                                      <div className="flex gap-2">
+                                        {task.file_sk_name && (
+                                           <button type="button" onClick={() => handleSimulateDownload(task.file_sk_name)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg border border-transparent hover:border-blue-200 transition-colors" title="Lihat/Unduh Dokumen">
+                                              <Eye className="w-4 h-4" />
+                                           </button>
+                                        )}
+                                        <input type="file" accept=".pdf" className="hidden" id={`upload-sk-${index}`} onChange={(e) => handleFileUpload(index, 'file_sk_name', e.target.files[0])} />
+                                        <label htmlFor={`upload-sk-${index}`} className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-blue-100 flex items-center gap-1.5 transition-colors"><Upload className="w-3.5 h-3.5"/> {task.file_sk_name ? 'Ubah File' : 'Upload'}</label>
+                                      </div>
+                                   </div>
+                                </div>
+                             </div>
+
+                             {/* Upload Dokumen Serah Terima */}
+                             <div className="bg-gray-50 border border-gray-200 border-dashed rounded-2xl p-5 flex flex-col justify-center">
+                                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5"/> Dokumen Serah Terima</label>
+                                <div className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
+                                   <div className="flex-1 flex items-center gap-2 justify-between">
+                                      <span className="text-[12px] font-semibold text-gray-700 truncate max-w-[150px] xl:max-w-[250px]" title={task.file_bast_name}>{task.file_bast_name || 'Belum ada file Serah Terima'}</span>
+                                      <div className="flex gap-2">
+                                        {task.file_bast_name && (
+                                           <button type="button" onClick={() => handleSimulateDownload(task.file_bast_name)} className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg border border-transparent hover:border-orange-200 transition-colors" title="Lihat/Unduh Dokumen">
+                                              <Eye className="w-4 h-4" />
+                                           </button>
+                                        )}
+                                        <input type="file" accept=".pdf" className="hidden" id={`upload-bast-${index}`} onChange={(e) => handleFileUpload(index, 'file_bast_name', e.target.files[0])} />
+                                        <label htmlFor={`upload-bast-${index}`} className="px-4 py-2 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-orange-100 flex items-center gap-1.5 transition-colors"><Upload className="w-3.5 h-3.5"/> {task.file_bast_name ? 'Ubah File' : 'Upload'}</label>
+                                      </div>
+                                   </div>
+                                </div>
                              </div>
                           </div>
                           
@@ -1340,7 +1669,7 @@ export default function App() {
                              </div>
                              
                              <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 shadow-sm">
-                               <label className="text-[11px] font-black text-orange-800 uppercase mb-4 block border-b pb-3 tracking-widest">SERAH TERIMA BAST</label>
+                               <label className="text-[11px] font-black text-orange-800 uppercase mb-4 block border-b pb-3 tracking-widest">SERAH TERIMA</label>
                                {(task.riwayat_serah_terima || []).map((r, hi) => (
                                  <div key={hi} className="flex gap-2 mb-3 items-center">
                                     <input type="number" className="w-20 px-3 py-2 border border-gray-200 rounded-xl font-bold text-xs" value={r.tahun} onChange={(e) => updateHistory(index, 'riwayat_serah_terima', hi, 'tahun', e.target.value)} placeholder="Thn" />
@@ -1348,7 +1677,7 @@ export default function App() {
                                     <button onClick={() => removeHistory(index, 'riwayat_serah_terima', hi)} className="text-red-300 hover:text-red-600 transition-colors p-1"><XSquare className="w-5 h-5"/></button>
                                  </div>
                                ))}
-                               <button type="button" onClick={() => addHistory(index, 'riwayat_serah_terima')} className="w-full mt-3 py-2 border-2 border-dashed border-orange-200 text-[10px] text-orange-600 font-black rounded-xl hover:bg-orange-100 transition-all uppercase tracking-widest">+ TAHUN BAST</button>
+                               <button type="button" onClick={() => addHistory(index, 'riwayat_serah_terima')} className="w-full mt-3 py-2 border-2 border-dashed border-orange-200 text-[10px] text-orange-600 font-black rounded-xl hover:bg-orange-100 transition-all uppercase tracking-widest">+ TAHUN SERAH TERIMA</button>
                              </div>
                           </div>
                         </div>
@@ -1437,6 +1766,21 @@ export default function App() {
                                 <div className="bg-orange-500 h-full transition-all duration-1000" style={{ width: `${pctST}%` }}></div>
                               </div>
                             </div>
+                            
+                            {/* Download Dokumen Section (Card) */}
+                            <div className="flex gap-3 pt-3 border-t border-gray-100">
+                               {task.file_sk_name && (
+                                  <button onClick={(e) => handleDownloadFromTable(e, task.file_sk_name)} className="flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100 hover:bg-blue-100" title={`Unduh SK: ${task.file_sk_name}`}>
+                                     <Paperclip className="w-3 h-3" /> File SK
+                                  </button>
+                               )}
+                               {task.file_bast_name && (
+                                  <button onClick={(e) => handleDownloadFromTable(e, task.file_bast_name)} className="flex items-center gap-1 text-[11px] font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded border border-orange-100 hover:bg-orange-100" title={`Unduh Dokumen Serah Terima dari Cloud: ${task.file_bast_name}`}>
+                                     <Paperclip className="w-3 h-3" /> File Serah Terima
+                                  </button>
+                               )}
+                            </div>
+                            
                           </div>
                         </div>
                       );
@@ -1457,37 +1801,84 @@ function printReport(title, subtitle, headers, dataRows) {
   const printWindow = window.open('', '_blank');
   const currentDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
   const htmlContent = `
+    <!DOCTYPE html>
     <html>
       <head>
         <title>${title}</title>
         <style>
-          body { font-family: sans-serif; padding: 40px; color: #333; }
-          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-          th { background: #f4f4f4; }
-          .footer { margin-top: 40px; text-align: right; }
+          @page { size: landscape; margin: 15mm; }
+          body { 
+            font-family: 'Tahoma', sans-serif; 
+            font-size: 12pt; 
+            padding: 10px 20px; 
+            color: #000; 
+            line-height: 1.5;
+          }
+          .kop-surat {
+            display: flex;
+            align-items: center;
+            border-bottom: 4px solid #000;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+          }
+          .kop-logo {
+            width: 85px;
+            height: auto;
+            margin-right: 25px;
+          }
+          .kop-text {
+            flex: 1;
+            text-align: center;
+            padding-right: 110px; /* Untuk menyeimbangkan logo di kiri */
+          }
+          .kop-text h2 { margin: 0 0 5px 0; font-size: 15pt; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
+          .kop-text p { margin: 0; font-size: 12pt; }
+          .doc-title { text-align: center; margin-bottom: 25px; }
+          .doc-title h1 { margin: 0 0 5px 0; font-size: 14pt; text-transform: uppercase; text-decoration: underline; }
+          .doc-title p { margin: 0; font-size: 12pt; color: #333; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11pt; }
+          th, td { border: 1px solid #000; padding: 8px 12px; text-align: left; vertical-align: middle; }
+          th { background-color: #e5e7eb; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 10pt; }
+          .footer { margin-top: 50px; display: flex; justify-content: flex-end; }
+          .ttd-box { text-align: center; width: 280px; }
+          .ttd-box p { margin: 0; font-size: 12pt; }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h2>BPDAS KAHAYAN</h2>
+        <div class="kop-surat">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg/200px-Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg.png" class="kop-logo" alt="Logo Kementerian Kehutanan" />
+          <div class="kop-text">
+            <h2>KEMENTERIAN KEHUTANAN</h2>
+            <h2>BPDAS KAHAYAN</h2>
+            <p>Sistem Pengawasan Pemenuhan Kewajiban PPKH dan PKTMKH</p>
+          </div>
+        </div>
+        
+        <div class="doc-title">
           <h1>${title}</h1>
           <p>${subtitle}</p>
         </div>
+
         <table>
           <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
           <tbody>${dataRows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody>
         </table>
+
         <div class="footer">
-          <p>Dicetak pada: ${currentDate}</p>
-          <br><br><br>
-          <p>( ........................................ )</p>
+          <div class="ttd-box">
+            <p style="text-align: left; margin-bottom: 80px;">Dicetak pada: ${currentDate}</p>
+            <p style="font-weight: bold;">( .................................................... )</p>
+            <p>NIP. ........................................</p>
+          </div>
         </div>
       </body>
     </html>
   `;
   printWindow.document.write(htmlContent);
   printWindow.document.close();
-  printWindow.print();
+  
+  // Memberikan jeda setengah detik agar Logo Kop Surat termuat sempurna sebelum dialog Print muncul
+  setTimeout(() => {
+    printWindow.print();
+  }, 500);
 }
