@@ -753,6 +753,36 @@ export default function App() {
     document.body.removeChild(link);
   };
 
+  const exportPlantStatusCSV = () => {
+    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam Total (Ha)", `Realisasi Khusus ${selectedPlantStatus} (Ha)`, "Status"];
+    let csvContent = headers.join(",") + "\n";
+    dashboardPlantStatusCompanies.forEach(c => {
+      const tasks = obligationsData[c.id] || [];
+      tasks.forEach(task => {
+        let specificArea = 0;
+        if (task.riwayat_tanam) {
+          task.riwayat_tanam.forEach(r => {
+            const s = r.status || 'P0';
+            if (s === selectedPlantStatus) specificArea += (Number(r.luas) || 0);
+          });
+        }
+        if (specificArea > 0) {
+           const totals = getTaskTotals(task);
+           const luasSK = Number(task.luas) || 0;
+           csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${specificArea}","${task.status || c.status}"\n`;
+        }
+      });
+    });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Daftar_Perusahaan_${selectedPlantStatus}_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const exportExecCSV = () => {
     const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam (Ha)", "Serah Terima (Ha)", "Status Eksekutif"];
     let csvContent = headers.join(",") + "\n";
@@ -1172,22 +1202,28 @@ export default function App() {
               </div>
 
               {/* 1. TOTAL GENERAL */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className={`grid grid-cols-1 gap-6 ${dashboardCategory === 'Semua' ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
                 <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-green-600">
                   <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Rehabilitasi DAS</p>
                   <p className="text-4xl font-black text-green-700">{areaStats.totalDAS.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
                   <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countDAS} UNIT AKTIF</p>
                 </div>
-                <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-amber-500">
-                  <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Reklamasi Hutan</p>
-                  <p className="text-4xl font-black text-amber-600">{areaStats.totalReklamasi.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
-                  <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countReklamasi} UNIT AKTIF</p>
-                </div>
-                <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-blue-500">
-                  <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Reboisasi Areal Pengganti</p>
-                  <p className="text-4xl font-black text-blue-600">{areaStats.totalReboisasi.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
-                  <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countReboisasi} UNIT AKTIF</p>
-                </div>
+                
+                {dashboardCategory !== 'PKTMKH' && (
+                  <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-amber-500 animate-in zoom-in-95 duration-300">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Reklamasi Hutan</p>
+                    <p className="text-4xl font-black text-amber-600">{areaStats.totalReklamasi.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
+                    <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countReklamasi} UNIT AKTIF</p>
+                  </div>
+                )}
+
+                {dashboardCategory !== 'PPKH' && (
+                  <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-blue-500 animate-in zoom-in-95 duration-300">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Reboisasi Areal Pengganti</p>
+                    <p className="text-4xl font-black text-blue-600">{areaStats.totalReboisasi.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
+                    <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countReboisasi} UNIT AKTIF</p>
+                  </div>
+                )}
               </div>
 
               {/* 2. REKAPITULASI PROGRES PEMENUHAN KEWAJIBAN */}
@@ -1230,7 +1266,7 @@ export default function App() {
               {/* 3. TREN KINERJA TAHUNAN */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 w-full">
                 <h3 className="text-lg font-black text-gray-900 mb-8 flex items-center gap-3"><TrendingUp className="w-6 h-6 text-purple-600"/> Tren Kinerja Tahunan</h3>
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 xl:gap-8">
                    <div className="bg-gray-50 rounded-xl p-6 border border-gray-100 shadow-inner">
                       <p className="text-[12px] font-black text-gray-500 uppercase tracking-widest text-center mb-6 border-b border-gray-200 pb-3">Penyusunan RKP</p>
                       <div className="h-64 flex items-end gap-2">
