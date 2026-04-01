@@ -90,6 +90,7 @@ export default function App() {
   // STATE BARU: Laporan Eksekutif Pimpinan
   const [execCategory, setExecCategory] = useState('PPKH');
   const [execTask, setExecTask] = useState('Rehabilitasi DAS');
+  const [selectedExecStatus, setSelectedExecStatus] = useState(null);
 
   // ==========================================
   // EFFECT: AUTENTIKASI FIREBASE
@@ -552,7 +553,7 @@ export default function App() {
     return alerts;
   }, [companiesData, obligationsData]);
 
-  // LOGIKA BARU: Data Laporan Eksekutif Pimpinan
+  // LOGIKA BARU: Data Laporan Eksekutif Pimpinan (Hierarki Waterfall Bebas Ganda)
   const executiveReportData = useMemo(() => {
     let metrics = {
       st_full: { count: 0, areaSK: 0 },
@@ -595,22 +596,85 @@ export default function App() {
           isTelat = (currentYear - skYear) >= 1;
         }
 
-        // 1 & 2: Serah Terima
-        if (luasST >= luasSK) { metrics.st_full.count++; metrics.st_full.areaSK += luasSK; }
-        else if (luasST > 0) { metrics.st_partial.count++; metrics.st_partial.areaSK += luasSK; }
-
-        // 3 & 4: Penanaman
-        if (luasTanam >= luasSK) { metrics.tanam_full.count++; metrics.tanam_full.areaSK += luasSK; }
-        else if (luasTanam > 0) { metrics.tanam_partial.count++; metrics.tanam_partial.areaSK += luasSK; }
-
-        // 5: Belum Tanam Telat (> 1 thn)
-        if (luasTanam === 0 && isTelat) {
-          metrics.belum_tanam_telat.count++; metrics.belum_tanam_telat.areaSK += luasSK;
+        // ==============================================================
+        // HIERARKI / WATERFALL LOGIC (Mencegah Double-Count)
+        // ==============================================================
+        if (luasST >= luasSK) { 
+            metrics.st_full.count++; 
+            metrics.st_full.areaSK += luasSK; 
+        }
+        else if (luasST > 0) { 
+            metrics.st_partial.count++; 
+            metrics.st_partial.areaSK += luasSK; 
+        }
+        else if (luasTanam >= luasSK) { 
+            metrics.tanam_full.count++; 
+            metrics.tanam_full.areaSK += luasSK; 
+        }
+        else if (luasTanam > 0) { 
+            metrics.tanam_partial.count++; 
+            metrics.tanam_partial.areaSK += luasSK; 
+        }
+        else if (luasTanam === 0 && isTelat) {
+            metrics.belum_tanam_telat.count++; 
+            metrics.belum_tanam_telat.areaSK += luasSK;
         }
       });
     });
     return metrics;
   }, [companiesData, obligationsData, execCategory, execTask]);
+
+  // LOGIKA BARU: Filter Tabel Eksekutif saat Kartu di-Klik
+  const getTaskExecStatus = (c, t, currentYear) => {
+      if (c.category !== execCategory) return null;
+      if (t.task !== execTask) return null;
+      const luasSK = Number(t.luas) || 0;
+      if (luasSK <= 0) return null;
+
+      const totals = getTaskTotals(t);
+      const luasTanam = totals.realisasi_tanam;
+      const luasST = totals.luas_serah_terima;
+
+      let skYear = currentYear; let isTelat = false;
+      if (t.tanggal_sk) {
+          const skDate = new Date(t.tanggal_sk);
+          const oneYearAgo = new Date(); oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+          isTelat = skDate <= oneYearAgo;
+      } else {
+          const yearMatch = t.sk_lokasi?.match(/(20\d{2})/);
+          if (yearMatch) { skYear = parseInt(yearMatch[1]); }
+          else if (t.riwayat_rkp && t.riwayat_rkp.length > 0) { skYear = Math.min(...t.riwayat_rkp.map(r => Number(r.tahun))); }
+          isTelat = (currentYear - skYear) >= 1;
+      }
+
+      if (luasST >= luasSK) return 'st_full';
+      if (luasST > 0) return 'st_partial';
+      if (luasTanam >= luasSK) return 'tanam_full';
+      if (luasTanam > 0) return 'tanam_partial';
+      if (luasTanam === 0 && isTelat) return 'belum_tanam_telat';
+      return null;
+  };
+
+  const getExecStatusLabel = (key) => {
+      switch(key) {
+          case 'st_full': return `${execCategory} Selesai Kewajiban`;
+          case 'st_partial': return `${execCategory} Serah Terima Sebagian`;
+          case 'tanam_full': return `${execCategory} Menanam 1 : 1`;
+          case 'tanam_partial': return `${execCategory} Menanam Sebagian`;
+          case 'belum_tanam_telat': return `${execCategory} Belum Menanam > 1 Thn`;
+          default: return '';
+      }
+  };
+
+  const dashboardExecCompanies = useMemo(() => {
+      if (!selectedExecStatus) return [];
+      const currentYear = new Date().getFullYear();
+      return companiesData.filter(c => {
+          const tasks = obligationsData[c.id] || [];
+          return tasks.some(t => getTaskExecStatus(c, t, currentYear) === selectedExecStatus);
+      });
+  }, [companiesData, obligationsData, selectedExecStatus, execCategory, execTask]);
+
 
   const dashboardDetailCompanies = useMemo(() => {
     if (!selectedDashboardStatus) return [];
@@ -689,34 +753,25 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  const exportPlantStatusCSV = () => {
-    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam Total (Ha)", `Realisasi Khusus ${selectedPlantStatus} (Ha)`, "Status"];
+  const exportExecCSV = () => {
+    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam (Ha)", "Serah Terima (Ha)", "Status Eksekutif"];
     let csvContent = headers.join(",") + "\n";
-    dashboardPlantStatusCompanies.forEach(c => {
+    const currentYear = new Date().getFullYear();
+    dashboardExecCompanies.forEach(c => {
       const tasks = obligationsData[c.id] || [];
       tasks.forEach(task => {
-        let specificArea = 0;
-        if (task.riwayat_tanam) {
-          task.riwayat_tanam.forEach(r => {
-            const s = r.status || 'P0';
-            if (s === selectedPlantStatus) specificArea += (Number(r.luas) || 0);
-          });
-        }
-        if (specificArea > 0) {
+        const statusKey = getTaskExecStatus(c, task, currentYear);
+        if (statusKey === selectedExecStatus) {
            const totals = getTaskTotals(task);
            const luasSK = Number(task.luas) || 0;
-           csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${specificArea}","${task.status || c.status}"\n`;
+           csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${totals.luas_serah_terima}","${getExecStatusLabel(statusKey)}"\n`;
         }
       });
     });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Daftar_Perusahaan_${selectedPlantStatus}_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const link = document.createElement("a"); const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url); link.setAttribute("download", `Daftar_Eksekutif_${selectedExecStatus}_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
   const printDashboardStatus = () => {
@@ -753,8 +808,29 @@ export default function App() {
     printReport(title, subtitle, headers, rows);
   };
 
+  const printExecStatus = () => {
+    const statusLabel = getExecStatusLabel(selectedExecStatus);
+    const title = `LAPORAN RINCIAN EKSEKUTIF - ${statusLabel.toUpperCase()}`; 
+    const subtitle = `Kategori Izin: ${execCategory} | Jenis Kewajiban: ${execTask}`;
+    const headers = ["No", "Nama Perusahaan", "Kategori", "No. SK Penetapan", "Luas SK (Ha)", "Tanam (Ha)", "Serah Terima (Ha)", "Status"];
+    let rows = []; let counter = 1; const currentYear = new Date().getFullYear();
+    
+    dashboardExecCompanies.forEach(c => { 
+      const tasks = obligationsData[c.id] || []; 
+      tasks.forEach(task => { 
+        const statusKey = getTaskExecStatus(c, task, currentYear);
+        if (statusKey === selectedExecStatus) { 
+          const totals = getTaskTotals(task); 
+          const luasSK = Number(task.luas) || 0; 
+          rows.push([ counter++, c.name, c.category, task.sk_lokasi || '-', luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), totals.luas_serah_terima.toLocaleString('id-ID'), statusLabel ]); 
+        } 
+      }); 
+    });
+    printReport(title, subtitle, headers, rows);
+  };
+
   const printExecutiveReport = () => {
-    const title = "LAPORAN EKSEKUTIF PEMENUHAN KEWAJIBAN";
+    const title = "LAPORAN EKSEKUTIF - REHABILITASI DAS";
     const subtitle = `Kategori Izin: ${execCategory} | Jenis Kewajiban: ${execTask}`;
     const printWindow = window.open('', '_blank');
     const currentDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -767,9 +843,7 @@ export default function App() {
           <style>
             @page { size: portrait; margin: 20mm; }
             body { font-family: 'Tahoma', sans-serif; font-size: 12pt; padding: 0 20px; color: #000; line-height: 1.6; }
-            .kop-surat { display: flex; align-items: center; border-bottom: 4px solid #000; padding-bottom: 15px; margin-bottom: 25px; }
-            .kop-logo { width: 85px; height: auto; margin-right: 25px; }
-            .kop-text { flex: 1; text-align: center; padding-right: 110px; }
+            .kop-surat { display: flex; flex-direction: column; align-items: center; border-bottom: 4px solid #000; padding-bottom: 15px; margin-bottom: 25px; text-align: center; }
             .kop-text h2 { margin: 0 0 5px 0; font-size: 15pt; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
             .kop-text p { margin: 0; font-size: 12pt; }
             .doc-title { text-align: center; margin-bottom: 30px; }
@@ -777,19 +851,22 @@ export default function App() {
             .doc-title p { margin: 0; font-size: 12pt; color: #333; }
             .content-list { margin-bottom: 40px; }
             .content-list p { margin-bottom: 15px; text-align: justify; }
+            .report-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12pt; }
+            .report-table td { padding: 12px 10px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+            .report-table tr:last-child td { border-bottom: none; }
             .highlight { font-weight: bold; }
-            .footer { margin-top: 60px; display: flex; justify-content: flex-end; }
-            .ttd-box { text-align: center; width: 280px; }
+            .text-red { color: #dc2626; }
+            .footer { margin-top: 60px; display: flex; justify-content: flex-end; padding-right: 40px; }
+            .ttd-box { text-align: center; width: 240px; }
             .ttd-box p { margin: 0; font-size: 12pt; }
           </style>
         </head>
         <body>
           <div class="kop-surat">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg/200px-Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg.png" class="kop-logo" alt="Logo Kementerian Kehutanan" />
             <div class="kop-text">
               <h2>KEMENTERIAN KEHUTANAN</h2>
               <h2>BPDAS KAHAYAN</h2>
-              <p>Sistem Pengawasan Pemenuhan Kewajiban PPKH dan PKTMKH</p>
+              <p>Sistem Pengawasan Pemenuhan Kewajiban PPKH</p>
             </div>
           </div>
           
@@ -799,24 +876,44 @@ export default function App() {
           </div>
 
           <div class="content-list">
-            <p>Berdasarkan data Sistem Monitoring BPDAS Kahayan pada tanggal ${currentDate}, bersama ini dilaporkan rincian data progres pemenuhan kewajiban <strong>${execTask}</strong> untuk pemegang izin <strong>${execCategory}</strong> sebagai berikut:</p>
+            <p>Berdasarkan data Sistem Monitoring BPDAS Kahayan pada tanggal ${currentDate}, bersama ini dilaporkan rincian data progres pemenuhan kewajiban <span class="highlight">${execTask}</span> untuk entitas pemegang izin <span class="highlight">${execCategory}</span> sebagai berikut:</p>
             
-            <ol>
-              <li>Sebanyak <span class="highlight">${executiveReportData.st_full.count} ${execCategory}</span> [seluas <span class="highlight">${executiveReportData.st_full.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan serah terima ${execTask.toLowerCase()} seluas 1:1 dari luas ${execCategory}.</li>
-              <li>Sebanyak <span class="highlight">${executiveReportData.st_partial.count} ${execCategory}</span> [seluas <span class="highlight">${executiveReportData.st_partial.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan serah terima ${execTask.toLowerCase()} secara parsial (sebagian) dari luas ${execCategory}.</li>
-              <li>Sebanyak <span class="highlight">${executiveReportData.tanam_full.count} ${execCategory}</span> [seluas <span class="highlight">${executiveReportData.tanam_full.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan penanaman ${execTask.toLowerCase()} seluas 1:1 dari luas ${execCategory}.</li>
-              <li>Sebanyak <span class="highlight">${executiveReportData.tanam_partial.count} ${execCategory}</span> [seluas <span class="highlight">${executiveReportData.tanam_partial.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan penanaman ${execTask.toLowerCase()} sebagian dari luas ${execCategory}.</li>
-              <li>Sebanyak <span class="highlight">${executiveReportData.belum_tanam_telat.count} ${execCategory}</span> [seluas <span class="highlight">${executiveReportData.belum_tanam_telat.areaSK.toLocaleString('id-ID')} Ha</span>] belum melakukan penanaman ${execTask.toLowerCase()} sejak 1 (satu) tahun diterbitkannya SK penetapan lokasi.</li>
-            </ol>
+            <table class="report-table">
+               <tr>
+                  <td style="width: 45%;"><span class="highlight">${execCategory} Selesai Kewajiban</span></td>
+                  <td style="width: 25%;"> = <span class="highlight">${executiveReportData.st_full.count}</span> Unit</td>
+                  <td style="width: 30%;">Luas = <span class="highlight">${executiveReportData.st_full.areaSK.toLocaleString('id-ID')}</span> Ha</td>
+               </tr>
+               <tr>
+                  <td><span class="highlight">${execCategory} Serah Terima Sebagian</span></td>
+                  <td> = <span class="highlight">${executiveReportData.st_partial.count}</span> Unit</td>
+                  <td>Luas = <span class="highlight">${executiveReportData.st_partial.areaSK.toLocaleString('id-ID')}</span> Ha</td>
+               </tr>
+               <tr>
+                  <td><span class="highlight">${execCategory} Menanam 1 : 1</span></td>
+                  <td> = <span class="highlight">${executiveReportData.tanam_full.count}</span> Unit</td>
+                  <td>Luas = <span class="highlight">${executiveReportData.tanam_full.areaSK.toLocaleString('id-ID')}</span> Ha</td>
+               </tr>
+               <tr>
+                  <td><span class="highlight">${execCategory} Menanam Sebagian</span></td>
+                  <td> = <span class="highlight">${executiveReportData.tanam_partial.count}</span> Unit</td>
+                  <td>Luas = <span class="highlight">${executiveReportData.tanam_partial.areaSK.toLocaleString('id-ID')}</span> Ha</td>
+               </tr>
+               <tr class="text-red">
+                  <td><span class="highlight">${execCategory} Belum Menanam > 1 Thn</span></td>
+                  <td> = <span class="highlight">${executiveReportData.belum_tanam_telat.count}</span> Unit</td>
+                  <td>Luas = <span class="highlight">${executiveReportData.belum_tanam_telat.areaSK.toLocaleString('id-ID')}</span> Ha</td>
+               </tr>
+            </table>
 
-            <p>Demikian laporan data ini disusun untuk dapat dipergunakan sebagaimana mestinya.</p>
+            <p style="margin-top: 30px;">Demikian laporan data ini disusun untuk dapat dipergunakan sebagaimana mestinya untuk bahan evaluasi kepatuhan pemegang izin ${execCategory} di wilayah kerja BPDAS Kahayan.</p>
           </div>
 
           <div class="footer">
             <div class="ttd-box">
               <p style="text-align: left; margin-bottom: 80px;">Dicetak pada: ${currentDate}</p>
-              <p style="font-weight: bold;">( .................................................... )</p>
-              <p>NIP. ........................................</p>
+              <p style="font-weight: bold;">( ........................ )</p>
+              <p>NIP. ........................</p>
             </div>
           </div>
         </body>
@@ -1424,10 +1521,10 @@ export default function App() {
               {/* 6. MODUL LAPORAN EKSEKUTIF PIMPINAN */}
               {dashboardCategory === 'PPKH' && (
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 animate-in slide-in-from-bottom-4 duration-500">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-gray-100 pb-4">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-gray-100 pb-6">
                     <div>
                       <h3 className="text-lg font-black text-gray-900 flex items-center gap-3">
-                        <FileText className="w-6 h-6 text-indigo-600" /> Laporan Eksekutif (Pimpinan) - Rehabilitasi DAS
+                        <FileText className="w-6 h-6 text-indigo-600" /> Laporan Eksekutif - Rehabilitasi DAS
                       </h3>
                       <p className="text-xs text-gray-500 mt-1">Rangkuman otomatis khusus progres Rehabilitasi DAS untuk entitas PPKH.</p>
                     </div>
@@ -1438,13 +1535,133 @@ export default function App() {
                     </div>
                   </div>
                   
-                  <div className="space-y-4 bg-indigo-50/30 p-6 md:p-8 rounded-xl border border-indigo-100 shadow-inner">
-                    <p className="text-[14px] text-gray-700 leading-relaxed font-semibold">1. Sebanyak <span className="font-black text-indigo-700">{executiveReportData.st_full.count} {execCategory}</span> [seluas <span className="font-black text-indigo-700">{executiveReportData.st_full.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan serah terima {execTask.toLowerCase()} seluas 1:1 dari luas {execCategory}.</p>
-                    <p className="text-[14px] text-gray-700 leading-relaxed font-semibold">2. Sebanyak <span className="font-black text-indigo-700">{executiveReportData.st_partial.count} {execCategory}</span> [seluas <span className="font-black text-indigo-700">{executiveReportData.st_partial.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan serah terima {execTask.toLowerCase()} secara parsial (sebagian) dari luas {execCategory}.</p>
-                    <p className="text-[14px] text-gray-700 leading-relaxed font-semibold">3. Sebanyak <span className="font-black text-indigo-700">{executiveReportData.tanam_full.count} {execCategory}</span> [seluas <span className="font-black text-indigo-700">{executiveReportData.tanam_full.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan penanaman {execTask.toLowerCase()} seluas 1:1 dari luas {execCategory}.</p>
-                    <p className="text-[14px] text-gray-700 leading-relaxed font-semibold">4. Sebanyak <span className="font-black text-indigo-700">{executiveReportData.tanam_partial.count} {execCategory}</span> [seluas <span className="font-black text-indigo-700">{executiveReportData.tanam_partial.areaSK.toLocaleString('id-ID')} Ha</span>] telah melakukan penanaman {execTask.toLowerCase()} sebagian dari luas {execCategory}.</p>
-                    <p className="text-[14px] text-gray-700 leading-relaxed font-semibold">5. Sebanyak <span className="font-black text-rose-600">{executiveReportData.belum_tanam_telat.count} {execCategory}</span> [seluas <span className="font-black text-rose-600">{executiveReportData.belum_tanam_telat.areaSK.toLocaleString('id-ID')} Ha</span>] belum melakukan penanaman {execTask.toLowerCase()} sejak 1 (satu) tahun diterbitkannya SK penetapan lokasi.</p>
+                  {/* KARTU/TOMBOL DATA LAPORAN */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5">
+                     
+                     <div onClick={() => setSelectedExecStatus(selectedExecStatus === 'st_full' ? null : 'st_full')} className={`bg-emerald-50 border border-emerald-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${selectedExecStatus === 'st_full' ? 'ring-2 ring-emerald-500 transform scale-105' : 'hover:border-emerald-400'}`}>
+                        <p className="text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-3 leading-tight h-8">{execCategory} Selesai Kewajiban</p>
+                        <div>
+                           <p className="text-3xl font-black text-emerald-700 mb-2">{executiveReportData.st_full.count} <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Unit</span></p>
+                           <div className="bg-white border border-emerald-100 rounded-md px-3 py-2 inline-block w-full">
+                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Luas: </span><span className="text-[13px] font-black text-emerald-800">{executiveReportData.st_full.areaSK.toLocaleString('id-ID')} Ha</span>
+                           </div>
+                        </div>
+                     </div>
+                     
+                     <div onClick={() => setSelectedExecStatus(selectedExecStatus === 'st_partial' ? null : 'st_partial')} className={`bg-blue-50 border border-blue-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${selectedExecStatus === 'st_partial' ? 'ring-2 ring-blue-500 transform scale-105' : 'hover:border-blue-400'}`}>
+                        <p className="text-[11px] font-black text-blue-800 uppercase tracking-widest mb-3 leading-tight h-8">{execCategory} Serah Terima Sebagian</p>
+                        <div>
+                           <p className="text-3xl font-black text-blue-700 mb-2">{executiveReportData.st_partial.count} <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Unit</span></p>
+                           <div className="bg-white border border-blue-100 rounded-md px-3 py-2 inline-block w-full">
+                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Luas: </span><span className="text-[13px] font-black text-blue-800">{executiveReportData.st_partial.areaSK.toLocaleString('id-ID')} Ha</span>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div onClick={() => setSelectedExecStatus(selectedExecStatus === 'tanam_full' ? null : 'tanam_full')} className={`bg-indigo-50 border border-indigo-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${selectedExecStatus === 'tanam_full' ? 'ring-2 ring-indigo-500 transform scale-105' : 'hover:border-indigo-400'}`}>
+                        <p className="text-[11px] font-black text-indigo-800 uppercase tracking-widest mb-3 leading-tight h-8">{execCategory} Menanam 1 : 1</p>
+                        <div>
+                           <p className="text-3xl font-black text-indigo-700 mb-2">{executiveReportData.tanam_full.count} <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Unit</span></p>
+                           <div className="bg-white border border-indigo-100 rounded-md px-3 py-2 inline-block w-full">
+                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Luas: </span><span className="text-[13px] font-black text-indigo-800">{executiveReportData.tanam_full.areaSK.toLocaleString('id-ID')} Ha</span>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div onClick={() => setSelectedExecStatus(selectedExecStatus === 'tanam_partial' ? null : 'tanam_partial')} className={`bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${selectedExecStatus === 'tanam_partial' ? 'ring-2 ring-amber-500 transform scale-105' : 'hover:border-amber-400'}`}>
+                        <p className="text-[11px] font-black text-amber-800 uppercase tracking-widest mb-3 leading-tight h-8">{execCategory} Menanam Sebagian</p>
+                        <div>
+                           <p className="text-3xl font-black text-amber-700 mb-2">{executiveReportData.tanam_partial.count} <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Unit</span></p>
+                           <div className="bg-white border border-amber-100 rounded-md px-3 py-2 inline-block w-full">
+                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Luas: </span><span className="text-[13px] font-black text-amber-800">{executiveReportData.tanam_partial.areaSK.toLocaleString('id-ID')} Ha</span>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div onClick={() => setSelectedExecStatus(selectedExecStatus === 'belum_tanam_telat' ? null : 'belum_tanam_telat')} className={`bg-rose-50 border border-rose-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${selectedExecStatus === 'belum_tanam_telat' ? 'ring-2 ring-rose-500 transform scale-105' : 'hover:border-rose-400'}`}>
+                        <p className="text-[11px] font-black text-rose-800 uppercase tracking-widest mb-3 leading-tight h-8">{execCategory} Belum Menanam &gt; 1 Thn</p>
+                        <div>
+                           <p className="text-3xl font-black text-rose-700 mb-2">{executiveReportData.belum_tanam_telat.count} <span className="text-[10px] font-bold text-rose-600 uppercase tracking-widest">Unit</span></p>
+                           <div className="bg-white border border-rose-100 rounded-md px-3 py-2 inline-block w-full">
+                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Luas: </span><span className="text-[13px] font-black text-rose-800">{executiveReportData.belum_tanam_telat.areaSK.toLocaleString('id-ID')} Ha</span>
+                           </div>
+                        </div>
+                     </div>
+
                   </div>
+
+                  {/* TABEL DETAIL EKSEKUTIF SAAT KARTU DI-KLIK */}
+                  {selectedExecStatus && (
+                    <div className="bg-gray-50 rounded-xl border border-gray-200 shadow-inner p-6 mt-8 animate-in slide-in-from-top-4 duration-500">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-200 pb-4">
+                        <div>
+                          <h3 className="font-bold text-gray-900 tracking-tight text-lg flex items-center gap-2">
+                            <Database className="w-5 h-5 text-indigo-600" />
+                            Daftar Perusahaan: {getExecStatusLabel(selectedExecStatus)}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button onClick={printExecStatus} className="px-4 py-2.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 font-bold rounded-lg text-[13px] transition-colors flex items-center gap-2 border border-rose-200 shadow-sm">
+                            <Printer className="w-4 h-4" /> Cetak Rincian
+                          </button>
+                          <button onClick={exportExecCSV} className="px-4 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 font-bold rounded-lg text-[13px] transition-colors flex items-center gap-2 shadow-md">
+                            <Download className="w-4 h-4" /> Export CSV
+                          </button>
+                          <button onClick={() => setSelectedExecStatus(null)} className="p-2.5 bg-white text-gray-500 hover:text-red-500 hover:bg-red-50 border border-gray-200 rounded-lg transition-colors shadow-sm">
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="overflow-auto w-full border border-gray-200 rounded-xl bg-white max-h-[400px]">
+                        <table className="w-full text-left whitespace-nowrap text-[14px]">
+                          <thead className="bg-gray-100 border-b border-gray-200 sticky top-0 z-10">
+                            <tr>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Unit Perusahaan</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-center">Tipe</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">No. SK Penetapan</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Luas SK (Ha)</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Tanam (Ha)</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Serah Terima (Ha)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {dashboardExecCompanies.flatMap((c) => {
+                              const tasks = obligationsData[c.id] || [];
+                              const currentYear = new Date().getFullYear();
+                              return tasks.map((taskData, idx) => {
+                                const statusKey = getTaskExecStatus(c, taskData, currentYear);
+                                if (statusKey !== selectedExecStatus) return null;
+                                
+                                const totals = getTaskTotals(taskData);
+                                const luasSK = Number(taskData.luas) || 0;
+                                
+                                return (
+                                  <tr key={`${c.id}-${taskData.id || idx}`} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-6 py-4">
+                                      <p className="font-bold text-gray-900">{c.name}</p>
+                                      <p className="text-[11px] text-gray-500 mt-1">{c.sector}</p>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${c.category === 'PPKH' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-green-100 text-green-800 border-green-200'}`}>{c.category}</span>
+                                    </td>
+                                    <td className="px-6 py-4"><span className="font-mono text-[11px] font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded border border-gray-200">{taskData.sk_lokasi || '-'}</span></td>
+                                    <td className="px-6 py-4 text-right font-bold text-gray-800">{luasSK.toLocaleString('id-ID')}</td>
+                                    <td className="px-6 py-4 text-right"><span className="font-bold text-indigo-700">{totals.realisasi_tanam.toLocaleString('id-ID')}</span></td>
+                                    <td className="px-6 py-4 text-right"><span className="font-bold text-emerald-700">{totals.luas_serah_terima.toLocaleString('id-ID')}</span></td>
+                                  </tr>
+                                );
+                              }).filter(Boolean);
+                            })}
+                            {dashboardExecCompanies.length === 0 && (
+                              <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-500 font-bold uppercase tracking-widest">Tidak ada data untuk kategori ini</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               )}
             </div>
@@ -1839,8 +2056,8 @@ function printReport(title, subtitle, headers, dataRows) {
           table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11pt; }
           th, td { border: 1px solid #000; padding: 8px 12px; text-align: left; vertical-align: middle; }
           th { background-color: #e5e7eb; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 10pt; }
-          .footer { margin-top: 50px; display: flex; justify-content: flex-end; }
-          .ttd-box { text-align: center; width: 280px; }
+          .footer { margin-top: 50px; display: flex; justify-content: flex-end; padding-right: 40px; }
+          .ttd-box { text-align: center; width: 240px; }
           .ttd-box p { margin: 0; font-size: 12pt; }
         </style>
       </head>
@@ -1867,8 +2084,8 @@ function printReport(title, subtitle, headers, dataRows) {
         <div class="footer">
           <div class="ttd-box">
             <p style="text-align: left; margin-bottom: 80px;">Dicetak pada: ${currentDate}</p>
-            <p style="font-weight: bold;">( .................................................... )</p>
-            <p>NIP. ........................................</p>
+            <p style="font-weight: bold;">( ........................ )</p>
+            <p>NIP. ........................</p>
           </div>
         </div>
       </body>
