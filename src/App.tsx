@@ -83,6 +83,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  const [selectedMainCard, setSelectedMainCard] = useState(null); // STATE BARU: Untuk kartu Total General
   const [selectedDashboardStatus, setSelectedDashboardStatus] = useState(null);
   const [selectedPlantStatus, setSelectedPlantStatus] = useState(null);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -347,18 +348,18 @@ export default function App() {
   };
 
   const exportToCSV = () => {
-    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Total RKP (Ha)", "Realisasi Tanam (Ha)", "Realisasi P0 (Ha)", "Realisasi P1 (Ha)", "Realisasi P2 (Ha)", "Serah Terima (Ha)", "Status"];
+    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Lokasi Penanaman", "Luas SK (Ha)", "Total RKP (Ha)", "Realisasi Tanam (Ha)", "Realisasi P0 (Ha)", "Realisasi P1 (Ha)", "Realisasi P2 (Ha)", "Serah Terima (Ha)", "Status"];
     let csvContent = headers.join(",") + "\n";
     filteredCompanies.forEach(c => {
       const tasks = obligationsData[c.id] || [];
       if (tasks.length === 0) {
-          csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","-","-","0","0","0","0","0","0","0","${c.status}"\n`;
+          csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","-","-","-","0","0","0","0","0","0","0","${c.status}"\n`;
       } else {
           tasks.forEach(task => {
               const totals = getTaskTotals(task); const luasSK = Number(task.luas) || 0;
               let p0 = 0, p1 = 0, p2 = 0;
               if (task.riwayat_tanam) { task.riwayat_tanam.forEach(r => { const l = Number(r.luas) || 0; if (r.status === 'P0') p0 += l; else if (r.status === 'P1') p1 += l; else if (r.status === 'P2') p2 += l; else p0 += l; }); }
-              csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.luas_rkp}","${totals.realisasi_tanam}","${p0}","${p1}","${p2}","${totals.luas_serah_terima}","${task.status || c.status}"\n`;
+              csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${task.lokasi || '-'}","${luasSK}","${totals.luas_rkp}","${totals.realisasi_tanam}","${p0}","${p1}","${p2}","${totals.luas_serah_terima}","${task.status || c.status}"\n`;
           });
       }
     });
@@ -676,6 +677,17 @@ export default function App() {
   }, [companiesData, obligationsData, selectedExecStatus, execCategory, execTask]);
 
 
+  // FILTER DATA UNTUK KARTU TOTAL GENERAL (Rehabilitasi DAS, Reklamasi Hutan, Reboisasi)
+  const dashboardMainCardCompanies = useMemo(() => {
+    if (!selectedMainCard) return [];
+    return companiesData.filter(c => {
+       const matchesCat = dashboardCategory === 'Semua' || c.category === dashboardCategory;
+       if (!matchesCat) return false;
+       const tasks = obligationsData[c.id] || [];
+       return tasks.some(t => t.task === selectedMainCard || (selectedMainCard === 'Reboisasi Areal Pengganti' && t.task === 'Reboisasi'));
+    });
+  }, [companiesData, obligationsData, dashboardCategory, selectedMainCard]);
+
   const dashboardDetailCompanies = useMemo(() => {
     if (!selectedDashboardStatus) return [];
     return companiesData.filter((c) => {
@@ -715,13 +727,33 @@ export default function App() {
     });
   }, [companiesData, dashboardCategory, obligationsData, selectedPlantStatus]);
 
+  // EXPORT CSV UNTUK TOTAL GENERAL KARTU UTAMA
+  const exportMainCardCSV = () => {
+    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Lokasi Penanaman", "Luas SK (Ha)", "Realisasi Tanam (Ha)", "Serah Terima (Ha)", "Status"];
+    let csvContent = headers.join(",") + "\n";
+    dashboardMainCardCompanies.forEach(c => {
+       const tasks = obligationsData[c.id] || [];
+       tasks.forEach(task => {
+          if (task.task === selectedMainCard || (selectedMainCard === 'Reboisasi Areal Pengganti' && task.task === 'Reboisasi')) {
+             const totals = getTaskTotals(task);
+             const luasSK = Number(task.luas) || 0;
+             csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${task.lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${totals.luas_serah_terima}","${task.status || c.status}"\n`;
+          }
+       });
+    });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a"); const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url); link.setAttribute("download", `Daftar_${selectedMainCard.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  };
+
   const exportDashboardCSV = () => {
-    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam (Ha)", "Realisasi P0 (Ha)", "Realisasi P1 (Ha)", "Realisasi P2 (Ha)", "Serah Terima (Ha)", "Status"];
+    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Lokasi Penanaman", "Luas SK (Ha)", "Realisasi Tanam (Ha)", "Realisasi P0 (Ha)", "Realisasi P1 (Ha)", "Realisasi P2 (Ha)", "Serah Terima (Ha)", "Status"];
     let csvContent = headers.join(",") + "\n";
     dashboardDetailCompanies.forEach(c => {
       const tasks = obligationsData[c.id] || [];
       if (tasks.length === 0) {
-          csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","-","-","0","0","0","0","0","0","${c.status}"\n`;
+          csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","-","-","-","0","0","0","0","0","0","${c.status}"\n`;
       } else {
           tasks.forEach(task => {
               const totals = getTaskTotals(task);
@@ -738,7 +770,7 @@ export default function App() {
                 });
               }
 
-              csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${p0}","${p1}","${p2}","${totals.luas_serah_terima}","${task.status || c.status}"\n`;
+              csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${task.lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${p0}","${p1}","${p2}","${totals.luas_serah_terima}","${task.status || c.status}"\n`;
           });
       }
     });
@@ -754,7 +786,7 @@ export default function App() {
   };
 
   const exportPlantStatusCSV = () => {
-    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam Total (Ha)", `Realisasi Khusus ${selectedPlantStatus} (Ha)`, "Status"];
+    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Lokasi Penanaman", "Luas SK (Ha)", "Realisasi Tanam Total (Ha)", `Realisasi Khusus ${selectedPlantStatus} (Ha)`, "Status"];
     let csvContent = headers.join(",") + "\n";
     dashboardPlantStatusCompanies.forEach(c => {
       const tasks = obligationsData[c.id] || [];
@@ -769,7 +801,7 @@ export default function App() {
         if (specificArea > 0) {
            const totals = getTaskTotals(task);
            const luasSK = Number(task.luas) || 0;
-           csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${specificArea}","${task.status || c.status}"\n`;
+           csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${task.lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${specificArea}","${task.status || c.status}"\n`;
         }
       });
     });
@@ -784,7 +816,7 @@ export default function App() {
   };
 
   const exportExecCSV = () => {
-    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Luas SK (Ha)", "Realisasi Tanam (Ha)", "Serah Terima (Ha)", "Status Eksekutif"];
+    const headers = ["Nama Perusahaan", "Kategori", "Sektor Industri", "Jenis Kewajiban", "No. SK Penetapan", "Lokasi Penanaman", "Luas SK (Ha)", "Realisasi Tanam (Ha)", "Serah Terima (Ha)", "Status Eksekutif"];
     let csvContent = headers.join(",") + "\n";
     const currentYear = new Date().getFullYear();
     dashboardExecCompanies.forEach(c => {
@@ -794,7 +826,7 @@ export default function App() {
         if (statusKey === selectedExecStatus) {
            const totals = getTaskTotals(task);
            const luasSK = Number(task.luas) || 0;
-           csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${totals.luas_serah_terima}","${getExecStatusLabel(statusKey)}"\n`;
+           csvContent += `"${c.name}","${c.category}","${c.sector || '-'}","${task.task}","${task.sk_lokasi || '-'}","${task.lokasi || '-'}","${luasSK}","${totals.realisasi_tanam}","${totals.luas_serah_terima}","${getExecStatusLabel(statusKey)}"\n`;
         }
       });
     });
@@ -804,11 +836,42 @@ export default function App() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
+  // CETAK PDF UNTUK TOTAL GENERAL KARTU UTAMA
+  const printMainCardStatus = () => {
+    const title = `LAPORAN RINCIAN KEWAJIBAN - ${selectedMainCard.toUpperCase()}`;
+    const subtitle = `Filter Kategori: ${dashboardCategory} | Total Unit: ${dashboardMainCardCompanies.length}`;
+    const headers = ["No", "Nama Perusahaan", "Kategori", "No. SK Penetapan", "Lokasi Penanaman", "Luas SK (Ha)", "Tanam (Ha)", "Serah Terima (Ha)", "Status"];
+    let rows = []; let counter = 1;
+    dashboardMainCardCompanies.forEach(c => {
+       const tasks = obligationsData[c.id] || [];
+       tasks.forEach(task => {
+          if (task.task === selectedMainCard || (selectedMainCard === 'Reboisasi Areal Pengganti' && task.task === 'Reboisasi')) {
+             const totals = getTaskTotals(task);
+             const luasSK = Number(task.luas) || 0;
+             rows.push([counter++, c.name, c.category, task.sk_lokasi || '-', task.lokasi || '-', luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), totals.luas_serah_terima.toLocaleString('id-ID'), task.status || c.status]);
+          }
+       });
+    });
+    printReport(title, subtitle, headers, rows);
+  };
+
   const printDashboardStatus = () => {
     const title = "LAPORAN STATUS PEMENUHAN KEWAJIBAN"; 
     const subtitle = `Filter Status: ${selectedDashboardStatus} | Total Unit: ${dashboardDetailCompanies.length}`;
-    const headers = ["No", "Nama Perusahaan", "Kategori", "Luas SK (Ha)", "Status"];
-    let rows = dashboardDetailCompanies.map((c, idx) => [idx + 1, c.name, c.category, (c.luas || 0).toLocaleString('id-ID'), c.status]);
+    const headers = ["No", "Nama Perusahaan", "Kategori", "No. SK Penetapan", "Lokasi Penanaman", "Luas SK (Ha)", "Tanam (Ha)", "Serah Terima (Ha)", "Status"];
+    let rows = []; let counter = 1;
+    dashboardDetailCompanies.forEach(c => {
+       const tasks = obligationsData[c.id] || [];
+       if (tasks.length === 0) {
+          rows.push([counter++, c.name, c.category, '-', '-', '0', '0', '0', c.status]);
+       } else {
+          tasks.forEach(task => {
+             const totals = getTaskTotals(task);
+             const luasSK = Number(task.luas) || 0;
+             rows.push([counter++, c.name, c.category, task.sk_lokasi || '-', task.lokasi || '-', luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), totals.luas_serah_terima.toLocaleString('id-ID'), task.status || c.status]);
+          });
+       }
+    });
     printReport(title, subtitle, headers, rows);
   };
 
@@ -816,7 +879,7 @@ export default function App() {
     const title = "LAPORAN RINCIAN STATUS PEMELIHARAAN TANAMAN"; 
     const statusName = selectedPlantStatus === 'P0' ? 'Tanaman Baru (P0)' : (selectedPlantStatus === 'P1' ? 'Pemeliharaan 1 (P1)' : 'Pemeliharaan 2+ (P2)'); 
     const subtitle = `Filter Status: ${statusName} | Total Unit: ${dashboardPlantStatusCompanies.length}`;
-    const headers = ["No", "Nama Perusahaan", "Kategori", "No. SK Penetapan", "Luas SK (Ha)", "Tanam Total (Ha)", `Luas ${selectedPlantStatus} (Ha)`, "Status Kepatuhan"];
+    const headers = ["No", "Nama Perusahaan", "Kategori", "No. SK Penetapan", "Lokasi Penanaman", "Luas SK (Ha)", "Tanam Total (Ha)", `Luas ${selectedPlantStatus} (Ha)`, "Status Kepatuhan"];
     let rows = []; let counter = 1;
     dashboardPlantStatusCompanies.forEach(c => { 
       const tasks = obligationsData[c.id] || []; 
@@ -831,7 +894,7 @@ export default function App() {
         if (specificArea > 0) { 
           const totals = getTaskTotals(task); 
           const luasSK = Number(task.luas) || 0; 
-          rows.push([ counter++, c.name, c.category, task.sk_lokasi || '-', luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), specificArea.toLocaleString('id-ID'), task.status || c.status ]); 
+          rows.push([ counter++, c.name, c.category, task.sk_lokasi || '-', task.lokasi || '-', luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), specificArea.toLocaleString('id-ID'), task.status || c.status ]); 
         } 
       }); 
     });
@@ -842,7 +905,7 @@ export default function App() {
     const statusLabel = getExecStatusLabel(selectedExecStatus);
     const title = `LAPORAN RINCIAN EKSEKUTIF - ${statusLabel.toUpperCase()}`; 
     const subtitle = `Kategori Izin: ${execCategory} | Jenis Kewajiban: ${execTask}`;
-    const headers = ["No", "Nama Perusahaan", "Kategori", "No. SK Penetapan", "Luas SK (Ha)", "Tanam (Ha)", "Serah Terima (Ha)", "Status"];
+    const headers = ["No", "Nama Perusahaan", "Kategori", "No. SK Penetapan", "Lokasi Penanaman", "Luas SK (Ha)", "Tanam (Ha)", "Serah Terima (Ha)", "Status"];
     let rows = []; let counter = 1; const currentYear = new Date().getFullYear();
     
     dashboardExecCompanies.forEach(c => { 
@@ -852,7 +915,7 @@ export default function App() {
         if (statusKey === selectedExecStatus) { 
           const totals = getTaskTotals(task); 
           const luasSK = Number(task.luas) || 0; 
-          rows.push([ counter++, c.name, c.category, task.sk_lokasi || '-', luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), totals.luas_serah_terima.toLocaleString('id-ID'), statusLabel ]); 
+          rows.push([ counter++, c.name, c.category, task.sk_lokasi || '-', task.lokasi || '-', luasSK.toLocaleString('id-ID'), totals.realisasi_tanam.toLocaleString('id-ID'), totals.luas_serah_terima.toLocaleString('id-ID'), statusLabel ]); 
         } 
       }); 
     });
@@ -1196,21 +1259,21 @@ export default function App() {
               
               {/* FILTER KATEGORI */}
               <div className="flex bg-white p-1 rounded-md border border-gray-300 w-fit shadow-sm">
-                <button onClick={() => setDashboardCategory('Semua')} className={`px-6 py-2 rounded-md font-semibold transition-all ${dashboardCategory === 'Semua' ? 'bg-gray-700 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>Semua</button>
-                <button onClick={() => setDashboardCategory('PPKH')} className={`px-6 py-2 rounded-md font-semibold transition-all flex items-center gap-2 ${dashboardCategory === 'PPKH' ? 'bg-amber-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}><Mountain className="w-4 h-4" /> PPKH</button>
-                <button onClick={() => setDashboardCategory('PKTMKH')} className={`px-6 py-2 rounded-md font-semibold transition-all flex items-center gap-2 ${dashboardCategory === 'PKTMKH' ? 'bg-green-700 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}><Leaf className="w-4 h-4" /> PKTMKH</button>
+                <button onClick={() => {setDashboardCategory('Semua'); setSelectedMainCard(null);}} className={`px-6 py-2 rounded-md font-semibold transition-all ${dashboardCategory === 'Semua' ? 'bg-gray-700 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>Semua</button>
+                <button onClick={() => {setDashboardCategory('PPKH'); setSelectedMainCard(null);}} className={`px-6 py-2 rounded-md font-semibold transition-all flex items-center gap-2 ${dashboardCategory === 'PPKH' ? 'bg-amber-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}><Mountain className="w-4 h-4" /> PPKH</button>
+                <button onClick={() => {setDashboardCategory('PKTMKH'); setSelectedMainCard(null);}} className={`px-6 py-2 rounded-md font-semibold transition-all flex items-center gap-2 ${dashboardCategory === 'PKTMKH' ? 'bg-green-700 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}><Leaf className="w-4 h-4" /> PKTMKH</button>
               </div>
 
               {/* 1. TOTAL GENERAL */}
               <div className={`grid grid-cols-1 gap-6 ${dashboardCategory === 'Semua' ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-                <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-green-600">
+                <div onClick={() => setSelectedMainCard(selectedMainCard === 'Rehabilitasi DAS' ? null : 'Rehabilitasi DAS')} className={`bg-white p-8 rounded-2xl border shadow-sm border-t-4 border-t-green-600 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedMainCard === 'Rehabilitasi DAS' ? 'ring-2 ring-green-500 border-green-200 bg-green-50/30' : 'border-gray-200'}`}>
                   <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Rehabilitasi DAS</p>
                   <p className="text-4xl font-black text-green-700">{areaStats.totalDAS.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
                   <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countDAS} UNIT AKTIF</p>
                 </div>
                 
                 {dashboardCategory !== 'PKTMKH' && (
-                  <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-amber-500 animate-in zoom-in-95 duration-300">
+                  <div onClick={() => setSelectedMainCard(selectedMainCard === 'Reklamasi Hutan' ? null : 'Reklamasi Hutan')} className={`bg-white p-8 rounded-2xl border shadow-sm border-t-4 border-t-amber-500 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg animate-in zoom-in-95 duration-300 ${selectedMainCard === 'Reklamasi Hutan' ? 'ring-2 ring-amber-500 border-amber-200 bg-amber-50/30' : 'border-gray-200'}`}>
                     <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Reklamasi Hutan</p>
                     <p className="text-4xl font-black text-amber-600">{areaStats.totalReklamasi.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
                     <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countReklamasi} UNIT AKTIF</p>
@@ -1218,13 +1281,91 @@ export default function App() {
                 )}
 
                 {dashboardCategory !== 'PPKH' && (
-                  <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm border-t-4 border-t-blue-500 animate-in zoom-in-95 duration-300">
+                  <div onClick={() => setSelectedMainCard(selectedMainCard === 'Reboisasi Areal Pengganti' ? null : 'Reboisasi Areal Pengganti')} className={`bg-white p-8 rounded-2xl border shadow-sm border-t-4 border-t-blue-500 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg animate-in zoom-in-95 duration-300 ${selectedMainCard === 'Reboisasi Areal Pengganti' ? 'ring-2 ring-blue-500 border-blue-200 bg-blue-50/30' : 'border-gray-200'}`}>
                     <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest">Reboisasi Areal Pengganti</p>
                     <p className="text-4xl font-black text-blue-600">{areaStats.totalReboisasi.toLocaleString('id-ID')} <span className="text-sm text-gray-400 font-semibold">Ha</span></p>
                     <p className="text-[11px] text-gray-400 mt-2 font-semibold tracking-wider">{areaStats.countReboisasi} UNIT AKTIF</p>
                   </div>
                 )}
               </div>
+
+              {/* TABEL DETAIL TOTAL GENERAL SAAT KARTU DI-KLIK */}
+              {selectedMainCard && (
+                <div className="bg-gray-50 rounded-xl border border-gray-200 shadow-inner p-6 mt-6 animate-in slide-in-from-top-4 duration-500">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-200 pb-4">
+                    <div>
+                      <h3 className="font-bold text-gray-900 tracking-tight text-lg flex items-center gap-2">
+                        <Database className="w-5 h-5 text-indigo-600" />
+                        Daftar Perusahaan: Kewajiban {selectedMainCard}
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button onClick={printMainCardStatus} className="px-4 py-2.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 font-bold rounded-lg text-[13px] transition-colors flex items-center gap-2 border border-rose-200 shadow-sm">
+                        <Printer className="w-4 h-4" /> Cetak Rincian
+                      </button>
+                      <button onClick={exportMainCardCSV} className="px-4 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 font-bold rounded-lg text-[13px] transition-colors flex items-center gap-2 shadow-md">
+                        <Download className="w-4 h-4" /> Export CSV
+                      </button>
+                      <button onClick={() => setSelectedMainCard(null)} className="p-2.5 bg-white text-gray-500 hover:text-red-500 hover:bg-red-50 border border-gray-200 rounded-lg transition-colors shadow-sm">
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="overflow-auto w-full border border-gray-200 rounded-xl bg-white max-h-[400px]">
+                    <table className="w-full text-left whitespace-nowrap text-[14px]">
+                      <thead className="bg-gray-100 border-b border-gray-200 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Unit Perusahaan</th>
+                          <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-center">Tipe</th>
+                          <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">No. SK Penetapan</th>
+                          <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Lokasi Penanaman</th>
+                          <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Luas SK (Ha)</th>
+                          <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Tanam (Ha)</th>
+                          <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Serah Terima (Ha)</th>
+                          <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {dashboardMainCardCompanies.flatMap((c) => {
+                          const tasks = obligationsData[c.id] || [];
+                          return tasks.map((taskData, idx) => {
+                            const isMatch = taskData.task === selectedMainCard || (selectedMainCard === 'Reboisasi Areal Pengganti' && taskData.task === 'Reboisasi');
+                            if (!isMatch) return null;
+                            
+                            const totals = getTaskTotals(taskData);
+                            const luasSK = Number(taskData.luas) || 0;
+                            const currentStatus = taskData.status || c.status;
+                            
+                            return (
+                              <tr key={`${c.id}-${taskData.id || idx}`} className="hover:bg-gray-50 transition-colors">
+                                <td className="px-6 py-4">
+                                  <p className="font-bold text-gray-900">{c.name}</p>
+                                  <p className="text-[11px] text-gray-500 mt-1">{c.sector}</p>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${c.category === 'PPKH' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-green-100 text-green-800 border-green-200'}`}>{c.category}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4"><span className="font-mono text-[11px] font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded border border-gray-200">{taskData.sk_lokasi || '-'}</span></td>
+                                <td className="px-6 py-4"><span className="text-[11px] font-bold text-gray-600">{taskData.lokasi || '-'}</span></td>
+                                <td className="px-6 py-4 text-right font-bold text-gray-800">{luasSK.toLocaleString('id-ID')}</td>
+                                <td className="px-6 py-4 text-right"><span className="font-bold text-green-700">{totals.realisasi_tanam.toLocaleString('id-ID')}</span></td>
+                                <td className="px-6 py-4 text-right"><span className="font-bold text-orange-700">{totals.luas_serah_terima.toLocaleString('id-ID')}</span></td>
+                                <td className="px-6 py-4 text-center"><span className={`px-3 py-1.5 rounded-md text-[11px] font-bold border uppercase ${getStatusColor(currentStatus)}`}>{currentStatus}</span></td>
+                              </tr>
+                            );
+                          }).filter(Boolean);
+                        })}
+                        {dashboardMainCardCompanies.length === 0 && (
+                          <tr><td colSpan="8" className="px-6 py-8 text-center text-gray-500 font-bold uppercase tracking-widest">Tidak ada data untuk kategori ini</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* 2. REKAPITULASI PROGRES PEMENUHAN KEWAJIBAN */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8">
@@ -1397,6 +1538,7 @@ export default function App() {
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Unit Perusahaan</th>
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-center">Tipe</th>
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">No. SK Penetapan</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Lokasi Penanaman</th>
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Luas SK (Ha)</th>
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Total Tanam (Ha)</th>
                               <th className="px-6 py-4 font-bold text-teal-700 uppercase text-xs tracking-wide text-right bg-teal-50/50">Luas {selectedPlantStatus} (Ha)</th>
@@ -1431,6 +1573,7 @@ export default function App() {
                                       </div>
                                     </td>
                                     <td className="px-6 py-4"><span className="font-mono text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded border border-gray-200">{taskData.sk_lokasi || '-'}</span></td>
+                                    <td className="px-6 py-4"><span className="text-[11px] font-bold text-gray-600">{taskData.lokasi || '-'}</span></td>
                                     <td className="px-6 py-4 text-right font-bold text-gray-800">{luasSK.toLocaleString('id-ID')}</td>
                                     <td className="px-6 py-4 text-right"><span className="font-bold text-green-700">{totals.realisasi_tanam.toLocaleString('id-ID')}</span></td>
                                     <td className="px-6 py-4 text-right bg-teal-50/30"><span className="font-bold text-teal-700 bg-teal-100 px-3 py-1.5 rounded-md border border-teal-200">{specificArea.toLocaleString('id-ID')}</span></td>
@@ -1501,6 +1644,7 @@ export default function App() {
                             <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Unit Perusahaan</th>
                             <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-center">Tipe</th>
                             <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">No. SK Penetapan</th>
+                            <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Lokasi Penanaman</th>
                             <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Luas SK (Ha)</th>
                             <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Realisasi (Ha)</th>
                             <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Serah Terima (Ha)</th>
@@ -1514,6 +1658,7 @@ export default function App() {
                               <tr key={c.id} className="hover:bg-gray-50">
                                  <td className="px-6 py-4 font-bold text-gray-900">{c.name}</td>
                                  <td className="px-6 py-4 text-center"><span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${c.category === 'PPKH' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-green-100 text-green-800 border-green-200'}`}>{c.category}</span></td>
+                                 <td className="px-6 py-4 text-gray-400 text-center">-</td>
                                  <td className="px-6 py-4 text-gray-400 text-center">-</td>
                                  <td className="px-6 py-4 text-right">0</td>
                                  <td className="px-6 py-4 text-right">0</td>
@@ -1539,6 +1684,7 @@ export default function App() {
                                     </div>
                                   </td>
                                   <td className="px-6 py-4"><span className="font-mono text-[11px] font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded border border-gray-200">{taskData.sk_lokasi || '-'}</span></td>
+                                  <td className="px-6 py-4"><span className="text-[11px] font-bold text-gray-600">{taskData.lokasi || '-'}</span></td>
                                   <td className="px-6 py-4 text-right font-bold text-gray-800">{luasSK.toLocaleString('id-ID')}</td>
                                   <td className="px-6 py-4 text-right"><span className="font-bold text-green-700">{totals.realisasi_tanam.toLocaleString('id-ID')}</span></td>
                                   <td className="px-6 py-4 text-right"><span className="font-bold text-blue-700">{totals.luas_serah_terima.toLocaleString('id-ID')}</span></td>
@@ -1656,6 +1802,7 @@ export default function App() {
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Unit Perusahaan</th>
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-center">Tipe</th>
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">No. SK Penetapan</th>
+                              <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide">Lokasi Penanaman</th>
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Luas SK (Ha)</th>
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Tanam (Ha)</th>
                               <th className="px-6 py-4 font-bold text-gray-700 uppercase text-xs tracking-wide text-right">Serah Terima (Ha)</th>
@@ -1682,6 +1829,7 @@ export default function App() {
                                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${c.category === 'PPKH' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-green-100 text-green-800 border-green-200'}`}>{c.category}</span>
                                     </td>
                                     <td className="px-6 py-4"><span className="font-mono text-[11px] font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded border border-gray-200">{taskData.sk_lokasi || '-'}</span></td>
+                                    <td className="px-6 py-4"><span className="text-[11px] font-bold text-gray-600">{taskData.lokasi || '-'}</span></td>
                                     <td className="px-6 py-4 text-right font-bold text-gray-800">{luasSK.toLocaleString('id-ID')}</td>
                                     <td className="px-6 py-4 text-right"><span className="font-bold text-indigo-700">{totals.realisasi_tanam.toLocaleString('id-ID')}</span></td>
                                     <td className="px-6 py-4 text-right"><span className="font-bold text-emerald-700">{totals.luas_serah_terima.toLocaleString('id-ID')}</span></td>
@@ -1690,7 +1838,7 @@ export default function App() {
                               }).filter(Boolean);
                             })}
                             {dashboardExecCompanies.length === 0 && (
-                              <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-500 font-bold uppercase tracking-widest">Tidak ada data untuk kategori ini</td></tr>
+                              <tr><td colSpan="7" className="px-6 py-8 text-center text-gray-500 font-bold uppercase tracking-widest">Tidak ada data untuk kategori ini</td></tr>
                             )}
                           </tbody>
                         </table>
@@ -1770,7 +1918,7 @@ export default function App() {
                           <tr key={`${c.id}-${idx}`} onClick={() => handleEditSelect(c)} className="hover:bg-green-50/50 cursor-pointer transition-all group">
                             <td className="px-8 py-6">
                               <p className="font-black text-gray-900 group-hover:text-green-800 transition-colors text-base">{c.name}</p>
-                              <p className="text-[11px] font-bold text-gray-400 mt-1 uppercase tracking-widest">{c.sector} • {t.sk_lokasi || 'Tanpa SK'}</p>
+                              <p className="text-[11px] font-bold text-gray-400 mt-1 uppercase tracking-widest">{c.sector} • SK: {t.sk_lokasi || '-'} • Lokasi: {t.lokasi || '-'}</p>
                             </td>
                             <td className="px-8 py-6 text-center">
                               <span className={`text-[9px] font-black px-3 py-1 rounded-full border uppercase tracking-[0.1em] ${c.category === 'PPKH' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-green-100 text-green-800 border-green-200'}`}>{c.category}</span>
@@ -2069,20 +2217,12 @@ function printReport(title, subtitle, headers, dataRows) {
           }
           .kop-surat {
             display: flex;
+            flex-direction: column;
             align-items: center;
             border-bottom: 4px solid #000;
             padding-bottom: 15px;
             margin-bottom: 25px;
-          }
-          .kop-logo {
-            width: 85px;
-            height: auto;
-            margin-right: 25px;
-          }
-          .kop-text {
-            flex: 1;
             text-align: center;
-            padding-right: 110px; /* Untuk menyeimbangkan logo di kiri */
           }
           .kop-text h2 { margin: 0 0 5px 0; font-size: 15pt; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
           .kop-text p { margin: 0; font-size: 12pt; }
@@ -2099,7 +2239,6 @@ function printReport(title, subtitle, headers, dataRows) {
       </head>
       <body>
         <div class="kop-surat">
-          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg/200px-Logo_Kementerian_Lingkungan_Hidup_dan_Kehutanan_Republik_Indonesia.svg.png" class="kop-logo" alt="Logo Kementerian Kehutanan" />
           <div class="kop-text">
             <h2>KEMENTERIAN KEHUTANAN</h2>
             <h2>BPDAS KAHAYAN</h2>
